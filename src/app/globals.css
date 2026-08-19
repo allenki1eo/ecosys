@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /*
+   * Light mode. Neutral zinc base; Ecohygiene green/blue live only in the
+   * accent + chart tokens so they show up on buttons, badges and charts
+   * rather than as large colour blocks.
+   */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 152 60% 30%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 152 60% 30%;
+    --radius: 0.5rem;
+
+    --brand-green: 152 55% 38%;
+    --brand-blue: 205 75% 45%;
+
+    /*
+     * Categorical series colours, assigned in fixed order and never cycled.
+     * Both modes are validated for OKLCH lightness band, chroma floor,
+     * colour-vision-deficiency separation and >= 3:1 contrast against their own
+     * surface — see docs/ARCHITECTURE.md. Re-validate before editing.
+     */
+    --chart-1: 152 55% 38%;
+    --chart-2: 205 75% 45%;
+    --chart-3: 43 84% 38%;
+    --chart-4: 262 52% 55%;
+    --chart-5: 12 72% 52%;
+  }
+
+  /* Dark mode is the default for this tool — see <html class="dark">. */
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 95%;
+    --card: 240 6% 7%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 6% 7%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 152 50% 45%;
+    --primary-foreground: 240 10% 4%;
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 60%;
+    --accent: 240 4% 16%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 16%;
+    --input: 240 4% 18%;
+    --ring: 152 50% 45%;
+
+    --brand-green: 152 50% 48%;
+    --brand-blue: 205 80% 58%;
+
+    /* Dark steps are chosen against the dark surface, not flipped from light. */
+    --chart-1: 152 48% 43.5%;
+    --chart-2: 205 72% 49.5%;
+    --chart-3: 43 80% 40.5%;
+    --chart-4: 262 55% 62%;
+    --chart-5: 12 70% 53.5%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  /* Numbers, IDs and references read as data, not prose. */
+  .font-data {
+    @apply font-mono text-[0.8125rem] tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Dense table rows in the Vercel dashboard idiom. */
+  .table-dense td,
+  .table-dense th {
+    @apply px-3 py-2;
+  }
+}
