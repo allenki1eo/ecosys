@@ -3,6 +3,7 @@ import { asc, eq, or } from "drizzle-orm";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette, type PaletteEntity } from "@/components/command-palette";
+import { MobileNav } from "@/components/mobile-nav";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-provider";
 import { UserMenu } from "@/components/user-menu";
@@ -15,6 +16,9 @@ import { INTERNAL_NAV, visibleNav } from "@/lib/navigation";
 export default async function InternalLayout({ children }: { children: React.ReactNode }) {
   const user = await requireStaff();
   const sections = visibleNav(INTERNAL_NAV, user.permissions);
+  // Permission filtering stays on the server; the nav components receive only
+  // the hrefs this user may open.
+  const allowedHrefs = sections.flatMap((section) => section.items.map((item) => item.href));
 
   const entities = await paletteEntities();
 
@@ -28,11 +32,12 @@ export default async function InternalLayout({ children }: { children: React.Rea
             <p className="text-[11px] text-muted-foreground">Operations</p>
           </div>
         </div>
-        <AppSidebar allowed={sections.flatMap((s) => s.items.map((i) => i.href))} />
+        <AppSidebar allowed={allowedHrefs} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+          <MobileNav allowed={allowedHrefs} />
           <Link href="/dashboard" className="lg:hidden">
             <Logo className="size-7 text-xs" />
           </Link>
