@@ -126,9 +126,18 @@ skip from `scheduled` to `signed_off`.
 
 SMS and email go through an outbox (`notifications` table): the row is written synchronously, and
 delivery is attempted after. A failed Africa's Talking call therefore never loses a reminder, and
-ops can see exactly what was sent to whom. `/api/cron/reminders` (hourly on Vercel Cron) queues
-reminders for jobs in the next 24 hours — one per assigned crew member plus the site contact —
-and flushes the queue. Delivery stays in dry-run mode unless `NOTIFICATIONS_ENABLED=true`.
+ops can see exactly what was sent to whom. `/api/cron/reminders` queues reminders for jobs in the
+next 24 hours — one per assigned crew member plus the site contact — and flushes the queue.
+Delivery stays in dry-run mode unless `NOTIFICATIONS_ENABLED=true`.
+
+**The sweep runs once a day** (05:00 UTC / 08:00 EAT, before crews head out), because its window
+*is* 24 hours: running it hourly would queue the same reminder ~24 times per job. It is also
+idempotent — `alreadyQueued()` skips any job/template/recipient combination already in the outbox
+— so a manual trigger, a retry or a cron misfire cannot double-send.
+
+This also keeps the project inside Vercel's Hobby plan, which permits at most one run per day per
+cron. On Pro you could raise the frequency, but there is no reason to: narrow the lookahead
+window first if you want reminders closer to the visit.
 
 ## 7. Design system
 
