@@ -34,6 +34,31 @@ export async function queueNotification(input: {
   return id;
 }
 
+/**
+ * True when this exact reminder has already been queued for this job. The
+ * reminder sweep looks 24 hours ahead, so without this a second run inside that
+ * window — a manual trigger, a retry, a cron misfire — would send the same crew
+ * member the same SMS again.
+ */
+async function alreadyQueued(
+  jobId: string,
+  template: string,
+  recipient: string,
+): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.relatedJobId, jobId),
+        eq(notifications.template, template),
+        eq(notifications.recipient, recipient),
+      ),
+    )
+    .limit(1);
+  return Boolean(existing);
+}
+
 /** Sends every queued message. Intended to run from a cron route. */
 export async function flushNotificationQueue(): Promise<{ sent: number; failed: number }> {
   const queued = await db.select().from(notifications).where(eq(notifications.status, "queued"));
@@ -139,6 +164,7 @@ export async function queueJobReminders(hoursAhead = 24): Promise<number> {
 
       for (const member of crew) {
         if (!member.phone || !member.notify) continue;
+        if (await alreadyQueued(job.id, "job_reminder_crew", member.phone)) continue;
         await queueNotification({
           channel: "sms",
           recipient: member.phone,
@@ -151,7 +177,10 @@ export async function queueJobReminders(hoursAhead = 24): Promise<number> {
       }
     }
 
-    if (job.siteContactPhone) {
+    if (
+      job.siteContactPhone &&
+      !(await alreadyQueued(job.id, "job_reminder_client", job.siteContactPhone))
+    ) {
       await queueNotification({
         channel: "sms",
         recipient: job.siteContactPhone,

@@ -69,6 +69,23 @@ uplink).
 SMS stays in dry-run mode until `NOTIFICATIONS_ENABLED=true` plus Africa's Talking credentials
 are present.
 
+## Deploying to Vercel
+
+1. **Set the database envs before the first deploy.** With `TURSO_DATABASE_URL` unset the app
+   falls back to `./local.db`, and a serverless filesystem is ephemeral and read-only — every
+   request would start from an empty database. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`
+   (plus `CRON_SECRET`) in Project → Settings → Environment Variables.
+2. **Create the schema on the Turso database** — `npm run db:push` locally with the production
+   envs exported, or apply `drizzle/migrations/` with `turso db shell`.
+3. **Seed only if you want the demo data.** `npm run db:seed` clears the tables it owns first, so
+   never point it at a database holding real records.
+
+**Cron and the Hobby plan.** Vercel Hobby allows each cron at most one run per day, so both jobs
+in `vercel.json` are daily — reminders at 05:00 UTC (08:00 EAT) and the overdue-invoice sweep at
+03:00 UTC. That is the right cadence regardless of plan: the reminder sweep looks 24 hours ahead,
+so running it more often would only re-cover the same jobs. It is idempotent either way — a
+reminder already in the outbox is never queued twice — so retries and manual triggers are safe.
+
 ## What's built
 
 **Internal dashboard** (`/dashboard`, `/schedule`, `/jobs`, `/clients`, `/inventory`,

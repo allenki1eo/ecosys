@@ -78,8 +78,9 @@ export default async function SettingsPage() {
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>
                 Reminders are queued into the notification outbox and delivered by the
-                <span className="font-data"> /api/cron/reminders</span> route — schedule it on Vercel
-                Cron once per hour.
+                <span className="font-data"> /api/cron/reminders</span> route, which runs once a day
+                at 08:00 EAT and covers every job in the following 24 hours. Re-running it is safe —
+                a reminder already in the outbox is never queued twice.
               </p>
               <p>
                 SMS goes out through Africa&apos;s Talking. Set{" "}
