@@ -72,9 +72,10 @@ are present.
 ## Deploying to Vercel
 
 1. **Set the database envs before the first deploy.** With `TURSO_DATABASE_URL` unset the app
-   falls back to `./local.db`, and a serverless filesystem is ephemeral and read-only — every
-   request would start from an empty database. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`
-   (plus `CRON_SECRET`) in Project → Settings → Environment Variables.
+   falls back to `./local.db`, which a serverless filesystem cannot open — the build succeeds and
+   then every request 500s. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` (plus `CRON_SECRET`)
+   in Project → Settings → Environment Variables, then redeploy. If you miss this, the logs say
+   so in as many words rather than showing a libSQL stack trace.
 2. **Create the schema on the Turso database** — `npm run db:push` locally with the production
    envs exported, or apply `drizzle/migrations/` with `turso db shell`.
 3. **Seed only if you want the demo data.** `npm run db:seed` clears the tables it owns first, so
