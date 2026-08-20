@@ -45,6 +45,32 @@ Then sign in at <http://localhost:3000/login>. Every seeded account uses the pas
 Signing in as a client account lands on that company's portal and nothing else — internal
 routes redirect away, and their queries cannot reach another tenant's rows.
 
+## Creating the first admin
+
+The seed data is demo material. For a real deployment, create your own Super Admin:
+
+```bash
+npm run db:create-admin -- --email you@example.com --name "Your Name"
+# prompts for a password, hidden
+```
+
+The password is typed at a hidden prompt rather than passed as an argument, so it stays out of
+shell history and out of the process list. For unattended use, set `ADMIN_PASSWORD` in the
+environment instead.
+
+To create the account on the **deployed** database, export the same credentials the deployment
+uses and run the same command:
+
+```bash
+export TURSO_DATABASE_URL="libsql://…"
+export TURSO_AUTH_TOKEN="…"
+npm run db:create-admin -- --email you@example.com --name "Your Name"
+```
+
+Re-running is safe: an existing account is promoted to Super Admin, reactivated, detached from any
+client tenant, and its password reset — which makes this the recovery path if an admin is ever
+locked out.
+
 ## Scripts
 
 | Command | Purpose |
@@ -57,6 +83,7 @@ routes redirect away, and their queries cannot reach another tenant's rows.
 | `npm run db:push` | Apply the schema directly (dev) |
 | `npm run db:studio` | Drizzle Studio |
 | `npm run db:seed` | Reset and reseed demo data |
+| `npm run db:create-admin` | Create or promote a Super Admin (see above) |
 
 ## Environment
 
