@@ -64,10 +64,11 @@ export function CommandPalette({
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="w-full justify-start gap-2 px-2 text-muted-foreground sm:w-56"
+        className="justify-start gap-2 px-2 text-muted-foreground sm:w-56"
       >
         <Search className="size-4" />
-        <span className="text-xs">Search or jump to…</span>
+        {/* The label would crowd the header on a phone; the icon carries it. */}
+        <span className="hidden text-xs sm:inline">Search or jump to…</span>
         <kbd className="ml-auto hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">
           ⌘K
         </kbd>

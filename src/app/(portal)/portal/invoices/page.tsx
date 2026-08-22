@@ -3,8 +3,8 @@ import { Receipt } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { InvoiceStatusBadge } from "@/components/status-badge";
+import { DataList } from "@/components/ui/data-list";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireClientUser } from "@/lib/auth/guards";
 import { financeSummary, listInvoices } from "@/lib/data/finance";
 import { scopeFor } from "@/lib/data/scope";
@@ -48,40 +48,50 @@ export default async function PortalInvoicesPage() {
           description="Invoices appear here once Ecohygiene issues them for completed work."
         />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Number</TableHead>
-                <TableHead>Issued</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Paid</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoices.map((invoice) => (
-                <TableRow key={invoice.id}>
-                  <TableCell className="font-data">{invoice.number}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(invoice.issuedAt)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(invoice.dueDate)}
-                  </TableCell>
-                  <TableCell className="font-data">{formatCurrency(invoice.amount)}</TableCell>
-                  <TableCell className="font-data text-muted-foreground">
-                    {formatCurrency(invoice.paidAmount)}
-                  </TableCell>
-                  <TableCell>
-                    <InvoiceStatusBadge status={invoice.status} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataList
+          rows={invoices}
+          rowKey={(invoice) => invoice.id}
+          columns={[
+            {
+              key: "number",
+              header: "Number",
+              role: "primary",
+              className: "font-data",
+              cell: (invoice) => invoice.number,
+            },
+            {
+              key: "amount",
+              header: "Amount",
+              role: "secondary",
+              className: "font-data",
+              cell: (invoice) => formatCurrency(invoice.amount),
+            },
+            {
+              key: "status",
+              header: "Status",
+              role: "trailing",
+              cell: (invoice) => <InvoiceStatusBadge status={invoice.status} />,
+            },
+            {
+              key: "issued",
+              header: "Issued",
+              className: "text-muted-foreground",
+              cell: (invoice) => formatDate(invoice.issuedAt),
+            },
+            {
+              key: "due",
+              header: "Due",
+              className: "text-muted-foreground",
+              cell: (invoice) => formatDate(invoice.dueDate),
+            },
+            {
+              key: "paid",
+              header: "Paid",
+              className: "font-data text-muted-foreground",
+              cell: (invoice) => formatCurrency(invoice.paidAmount),
+            },
+          ]}
+        />
       )}
     </>
   );

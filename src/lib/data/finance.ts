@@ -32,7 +32,9 @@ export async function listInvoices(scope: Scope, clientId?: string) {
       dueDate: invoices.dueDate,
       issuedAt: invoices.issuedAt,
       paidAt: invoices.paidAt,
-      paidAmount: sql<number>`coalesce((select sum(${payments.amount}) from ${payments} where ${payments.invoiceId} = ${invoices.id}), 0)`,
+      // Table-qualified literal SQL: interpolated columns render unqualified
+      // inside a correlated subquery and would bind to the wrong table.
+      paidAmount: sql<number>`coalesce((select sum("payments"."amount") from "payments" where "payments"."invoice_id" = "invoices"."id"), 0)`,
     })
     .from(invoices)
     .innerJoin(clients, eq(invoices.clientId, clients.id))
@@ -196,7 +198,7 @@ export async function recordPayment(
   const [totals] = await db
     .select({
       invoiceAmount: invoices.amount,
-      paid: sql<number>`coalesce((select sum(${payments.amount}) from ${payments} where ${payments.invoiceId} = ${invoices.id}), 0)`,
+      paid: sql<number>`coalesce((select sum("payments"."amount") from "payments" where "payments"."invoice_id" = "invoices"."id"), 0)`,
     })
     .from(invoices)
     .where(eq(invoices.id, invoiceId))

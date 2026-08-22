@@ -7,8 +7,8 @@ import { ArrowUpDown, Truck } from "lucide-react";
 import { JobStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DataList } from "@/components/ui/data-list";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatSchedule } from "@/lib/format";
 import { JOB_STATUS_LABELS } from "@/lib/labels";
 import type { JobStatus } from "@db/schema";
@@ -25,6 +25,14 @@ export type JobRow = {
 };
 
 type SortKey = "scheduledAt" | "clientName" | "status";
+
+function SortButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className="inline-flex items-center gap-1 hover:text-foreground">
+      {children} <ArrowUpDown className="size-3" />
+    </button>
+  );
+}
 
 /**
  * Dense, sortable, filterable table. Filtering happens in the browser because
@@ -104,70 +112,65 @@ export function JobsTable({ jobs, crewNames }: { jobs: JobRow[]; crewNames: Reco
           }
         />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Reference</TableHead>
-                <TableHead>
-                  <button
-                    onClick={() => toggleSort("scheduledAt")}
-                    className="inline-flex items-center gap-1 hover:text-foreground"
-                  >
-                    Scheduled <ArrowUpDown className="size-3" />
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button
-                    onClick={() => toggleSort("clientName")}
-                    className="inline-flex items-center gap-1 hover:text-foreground"
-                  >
-                    Client / site <ArrowUpDown className="size-3" />
-                  </button>
-                </TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Crew</TableHead>
-                <TableHead>
-                  <button
-                    onClick={() => toggleSort("status")}
-                    className="inline-flex items-center gap-1 hover:text-foreground"
-                  >
-                    Status <ArrowUpDown className="size-3" />
-                  </button>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((job) => (
-                <TableRow key={job.id}>
-                  <TableCell>
-                    <Link href={`/jobs/${job.id}`} className="font-data hover:underline">
-                      {job.reference}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {formatSchedule(new Date(job.scheduledAt))}
-                  </TableCell>
-                  <TableCell>
-                    <span className="block truncate">{job.clientName}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {job.siteName}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{job.serviceTypeName}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {job.crew.length === 0
-                      ? "Unassigned"
-                      : job.crew.map((id) => crewNames[id] ?? "Unknown").join(", ")}
-                  </TableCell>
-                  <TableCell>
-                    <JobStatusBadge status={job.status} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataList
+          rows={rows}
+          rowKey={(job) => job.id}
+          href={(job) => `/jobs/${job.id}`}
+          columns={[
+            {
+              key: "reference",
+              header: "Reference",
+              role: "primary",
+              cell: (job) => (
+                <Link href={`/jobs/${job.id}`} className="font-data hover:underline">
+                  {job.reference}
+                </Link>
+              ),
+            },
+            {
+              key: "client",
+              header: (
+                <SortButton onClick={() => toggleSort("clientName")}>Client / site</SortButton>
+              ),
+              role: "secondary",
+              cell: (job) => (
+                <>
+                  <span className="block truncate">{job.clientName}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {job.siteName}
+                  </span>
+                </>
+              ),
+            },
+            {
+              key: "status",
+              header: <SortButton onClick={() => toggleSort("status")}>Status</SortButton>,
+              role: "trailing",
+              cell: (job) => <JobStatusBadge status={job.status} />,
+            },
+            {
+              key: "scheduled",
+              header: <SortButton onClick={() => toggleSort("scheduledAt")}>Scheduled</SortButton>,
+              className: "whitespace-nowrap text-muted-foreground",
+              cell: (job) => formatSchedule(new Date(job.scheduledAt)),
+            },
+            {
+              key: "service",
+              header: "Service",
+              className: "text-muted-foreground",
+              cell: (job) => job.serviceTypeName,
+            },
+            {
+              key: "crew",
+              header: "Crew",
+              className: "text-xs text-muted-foreground",
+              cell: (job) =>
+                job.crew.length === 0
+                  ? "Unassigned"
+                  : job.crew.map((id) => crewNames[id] ?? "Unknown").join(", "),
+            },
+          ]}
+        />
       )}
     </div>
   );
