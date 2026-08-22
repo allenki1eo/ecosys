@@ -177,7 +177,8 @@ export async function listSuppliers(scope: Scope) {
       email: suppliers.email,
       phone: suppliers.phone,
       leadTimeDays: suppliers.leadTimeDays,
-      itemCount: sql<number>`(select count(*) from ${inventoryItems} where ${inventoryItems.supplierId} = ${suppliers.id})`,
+      // Table-qualified literal SQL — see the note in data/clients.ts.
+      itemCount: sql<number>`(select count(*) from "inventory_items" where "inventory_items"."supplier_id" = "suppliers"."id")`,
     })
     .from(suppliers)
     .orderBy(asc(suppliers.name));

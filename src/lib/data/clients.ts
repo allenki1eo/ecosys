@@ -35,9 +35,16 @@ export async function listClients(scope: Scope): Promise<ClientSummary[]> {
       industry: clients.industry,
       status: clients.status,
       contractEnd: clients.contractEnd,
-      siteCount: sql<number>`(select count(*) from ${sites} where ${sites.clientId} = ${clients.id})`,
-      openJobs: sql<number>`(select count(*) from ${jobs} where ${jobs.clientId} = ${clients.id} and ${jobs.status} in ('scheduled','en_route','in_progress'))`,
-      outstandingAmount: sql<number>`coalesce((select sum(${invoices.amount}) from ${invoices} where ${invoices.clientId} = ${clients.id} and ${invoices.status} in ('issued','part_paid','overdue')), 0)`,
+      /*
+       * Correlated subqueries are written as literal, table-qualified SQL.
+       * Interpolating Drizzle column objects here renders them *unqualified*
+       * (`where "client_id" = "id"`), so both names bind to the subquery's own
+       * table and the condition is silently never true — every count comes back
+       * as zero rather than raising. Qualify explicitly.
+       */
+      siteCount: sql<number>`(select count(*) from "sites" where "sites"."client_id" = "clients"."id")`,
+      openJobs: sql<number>`(select count(*) from "jobs" where "jobs"."client_id" = "clients"."id" and "jobs"."status" in ('scheduled','en_route','in_progress'))`,
+      outstandingAmount: sql<number>`coalesce((select sum("invoices"."amount") from "invoices" where "invoices"."client_id" = "clients"."id" and "invoices"."status" in ('issued','part_paid','overdue')), 0)`,
     })
     .from(clients)
     .where(and(tenantFilter(clients.id, scope)))

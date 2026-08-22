@@ -3,8 +3,8 @@ import { Download, FileCheck2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Badge } from "@/components/ui/badge";
+import { DataList } from "@/components/ui/data-list";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireClientUser } from "@/lib/auth/guards";
 import { CERTIFICATE_LABELS, expiringCertificates, listCertificates } from "@/lib/data/compliance";
 import { scopeFor } from "@/lib/data/scope";
@@ -48,65 +48,74 @@ export default async function PortalCertificatesPage() {
           description="Certificates are issued when a certifying service is completed at one of your sites."
         />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Reference</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Site</TableHead>
-                <TableHead>Issued</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Document</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {certificates.map((certificate) => {
+        <DataList
+          rows={certificates}
+          rowKey={(certificate) => certificate.id}
+          columns={[
+            {
+              key: "type",
+              header: "Type",
+              role: "primary",
+              cell: (certificate) => CERTIFICATE_LABELS[certificate.type],
+            },
+            {
+              key: "site",
+              header: "Site",
+              role: "secondary",
+              className: "text-muted-foreground",
+              cell: (certificate) => certificate.siteName,
+            },
+            {
+              key: "expiry-badge",
+              header: "Expires in",
+              role: "trailing",
+              cell: (certificate) => {
                 const remaining = daysUntil(certificate.expiresAt);
-                return (
-                  <TableRow key={certificate.id}>
-                    <TableCell className="font-data">{certificate.reference}</TableCell>
-                    <TableCell>{CERTIFICATE_LABELS[certificate.type]}</TableCell>
-                    <TableCell className="text-muted-foreground">{certificate.siteName}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(certificate.issuedAt)}
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-muted-foreground">
-                        {formatDate(certificate.expiresAt)}
-                      </span>
-                      {remaining !== null && remaining < 0 ? (
-                        <Badge variant="destructive" className="ml-2">
-                          Expired
-                        </Badge>
-                      ) : remaining !== null && remaining <= 30 ? (
-                        <Badge variant="warning" className="ml-2">
-                          {remaining}d
-                        </Badge>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      {certificate.pdfUrl && canDownload ? (
-                        <a
-                          href={certificate.pdfUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
-                        >
-                          <Download className="size-3.5" /> PDF
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          {canDownload ? "Being prepared" : "Ask your admin"}
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                if (remaining === null) return null;
+                if (remaining < 0) return <Badge variant="destructive">Expired</Badge>;
+                if (remaining <= 30) return <Badge variant="warning">{remaining}d</Badge>;
+                return <Badge variant="success">Valid</Badge>;
+              },
+            },
+            {
+              key: "reference",
+              header: "Reference",
+              className: "font-data",
+              cell: (certificate) => certificate.reference,
+            },
+            {
+              key: "issued",
+              header: "Issued",
+              className: "text-muted-foreground",
+              cell: (certificate) => formatDate(certificate.issuedAt),
+            },
+            {
+              key: "expires",
+              header: "Expires",
+              className: "text-muted-foreground",
+              cell: (certificate) => formatDate(certificate.expiresAt),
+            },
+            {
+              key: "document",
+              header: "Document",
+              cell: (certificate) =>
+                certificate.pdfUrl && canDownload ? (
+                  <a
+                    href={certificate.pdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
+                  >
+                    <Download className="size-3.5" /> PDF
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {canDownload ? "Being prepared" : "Ask your admin"}
+                  </span>
+                ),
+            },
+          ]}
+        />
       )}
     </>
   );
