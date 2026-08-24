@@ -7,6 +7,7 @@ import {
   Receipt,
   Settings,
   ShieldAlert,
+  Sparkles,
   Truck,
   Users,
 } from "lucide-react";
@@ -93,6 +94,12 @@ export const INTERNAL_NAV: NavSection[] = [
         icon: Users,
         permission: "users.manage",
         description: "Invite, deactivate, assign roles",
+      },
+      {
+        href: "/admin/services",
+        label: "Services",
+        icon: Sparkles,
+        description: "Service catalogue, checklists and rates",
       },
       {
         href: "/admin/settings",

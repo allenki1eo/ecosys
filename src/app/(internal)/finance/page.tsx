@@ -7,8 +7,8 @@ import { StatCard } from "@/components/stat-card";
 import { CompositionBar, TrendChart } from "@/components/charts";
 import { InvoiceStatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataList } from "@/components/ui/data-list";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireStaff } from "@/lib/auth/guards";
 import { listClients } from "@/lib/data/clients";
 import { financeSummary, listInvoices } from "@/lib/data/finance";
@@ -108,46 +108,66 @@ export default async function FinancePage() {
           description="Generate an invoice from a client's completed, unbilled jobs."
         />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Number</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Paid</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead>Status</TableHead>
-                {canManage ? <TableHead className="text-right">Action</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoices.map((invoice) => (
-                <TableRow key={invoice.id}>
-                  <TableCell>
-                    <Link href={`/finance/${invoice.id}`} className="font-data hover:underline">
-                      {invoice.number}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{invoice.clientName}</TableCell>
-                  <TableCell className="font-data">{formatCurrency(invoice.amount)}</TableCell>
-                  <TableCell className="font-data text-muted-foreground">
-                    {formatCurrency(invoice.paidAmount)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{formatDate(invoice.dueDate)}</TableCell>
-                  <TableCell>
-                    <InvoiceStatusBadge status={invoice.status} />
-                  </TableCell>
-                  {canManage ? (
-                    <TableCell className="text-right">
+        <DataList
+          rows={invoices}
+          rowKey={(invoice) => invoice.id}
+          columns={[
+            {
+              key: "number",
+              header: "Number",
+              role: "primary",
+              cell: (invoice) => (
+                <Link href={`/finance/${invoice.id}`} className="font-data hover:underline">
+                  {invoice.number}
+                </Link>
+              ),
+            },
+            {
+              key: "client",
+              header: "Client",
+              role: "secondary",
+              cell: (invoice) => invoice.clientName,
+            },
+            {
+              key: "status",
+              header: "Status",
+              role: "trailing",
+              cell: (invoice) => <InvoiceStatusBadge status={invoice.status} />,
+            },
+            {
+              key: "amount",
+              header: "Amount",
+              className: "font-data",
+              cell: (invoice) => formatCurrency(invoice.amount),
+            },
+            {
+              key: "paid",
+              header: "Paid",
+              className: "font-data text-muted-foreground",
+              cell: (invoice) => formatCurrency(invoice.paidAmount),
+            },
+            {
+              key: "due",
+              header: "Due",
+              className: "text-muted-foreground",
+              cell: (invoice) => formatDate(invoice.dueDate),
+            },
+            ...(canManage
+              ? [
+                  {
+                    key: "action",
+                    header: "Action",
+                    headerClassName: "text-right",
+                    className: "text-right",
+                    desktopOnly: true,
+                    cell: (invoice: (typeof invoices)[number]) => (
                       <InvoiceStatusControl invoiceId={invoice.id} status={invoice.status} />
-                    </TableCell>
-                  ) : null}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+        />
       )}
     </>
   );

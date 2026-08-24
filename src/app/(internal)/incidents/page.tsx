@@ -5,8 +5,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { IncidentStatusBadge, SeverityBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { DataList } from "@/components/ui/data-list";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireStaff } from "@/lib/auth/guards";
 import { listSites } from "@/lib/data/clients";
 import { listIncidents } from "@/lib/data/compliance";
@@ -50,62 +50,85 @@ export default async function IncidentsPage() {
           description="Nothing has been raised at any client site. Crews can log issues from the job view."
         />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Reference</TableHead>
-                <TableHead>Issue</TableHead>
-                <TableHead>Client / site</TableHead>
-                <TableHead>Severity</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Raised</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {incidents.map((incident) => (
-                <TableRow key={incident.id}>
-                  <TableCell className="font-data align-top">{incident.reference}</TableCell>
-                  <TableCell className="align-top">
-                    <span className="font-medium">{incident.title}</span>
-                    <span className="mt-0.5 block max-w-md text-xs text-muted-foreground">
-                      {incident.description}
+        <DataList
+          rows={incidents}
+          rowKey={(incident) => incident.id}
+          columns={[
+            {
+              key: "issue",
+              header: "Issue",
+              role: "primary",
+              className: "align-top",
+              cell: (incident) => (
+                <>
+                  <span className="font-medium">{incident.title}</span>
+                  <span className="mt-0.5 block max-w-md whitespace-normal text-xs text-muted-foreground">
+                    {incident.description}
+                  </span>
+                  {incident.resolutionNotes ? (
+                    <span className="mt-1 block max-w-md whitespace-normal text-xs text-brand-green">
+                      Resolution: {incident.resolutionNotes}
                     </span>
-                    {incident.resolutionNotes ? (
-                      <span className="mt-1 block max-w-md text-xs text-brand-green">
-                        Resolution: {incident.resolutionNotes}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    {incident.clientName}
-                    <span className="block text-xs text-muted-foreground">{incident.siteName}</span>
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <SeverityBadge severity={incident.severity} />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <IncidentStatusBadge status={incident.status} />
-                  </TableCell>
-                  <TableCell className="align-top text-xs text-muted-foreground">
-                    {formatRelative(incident.createdAt)}
-                    {incident.assignedToName ? (
-                      <Badge variant="muted" className="ml-2">
-                        {incident.assignedToName}
-                      </Badge>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-right align-top">
-                    {user.permissions.has("incidents.resolve") ? (
+                  ) : null}
+                </>
+              ),
+            },
+            {
+              key: "site",
+              header: "Client / site",
+              role: "secondary",
+              className: "align-top",
+              cell: (incident) => `${incident.clientName} — ${incident.siteName}`,
+            },
+            {
+              key: "status",
+              header: "Status",
+              role: "trailing",
+              className: "align-top",
+              cell: (incident) => <IncidentStatusBadge status={incident.status} />,
+            },
+            {
+              key: "reference",
+              header: "Reference",
+              className: "font-data align-top",
+              cell: (incident) => incident.reference,
+            },
+            {
+              key: "severity",
+              header: "Severity",
+              className: "align-top",
+              cell: (incident) => <SeverityBadge severity={incident.severity} />,
+            },
+            {
+              key: "raised",
+              header: "Raised",
+              className: "align-top text-xs text-muted-foreground",
+              cell: (incident) => (
+                <>
+                  {formatRelative(incident.createdAt)}
+                  {incident.assignedToName ? (
+                    <Badge variant="muted" className="ml-2">
+                      {incident.assignedToName}
+                    </Badge>
+                  ) : null}
+                </>
+              ),
+            },
+            ...(user.permissions.has("incidents.resolve")
+              ? [
+                  {
+                    key: "action",
+                    header: "Action",
+                    headerClassName: "text-right",
+                    className: "text-right align-top",
+                    cell: (incident: (typeof incidents)[number]) => (
                       <IncidentStatusControl incidentId={incident.id} status={incident.status} />
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+        />
       )}
     </>
   );
