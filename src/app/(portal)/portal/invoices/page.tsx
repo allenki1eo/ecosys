@@ -1,4 +1,4 @@
-import { Receipt } from "lucide-react";
+import { Download, Receipt } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -89,6 +89,20 @@ export default async function PortalInvoicesPage() {
               header: "Paid",
               className: "font-data text-muted-foreground",
               cell: (invoice) => formatCurrency(invoice.paidAmount),
+            },
+            {
+              key: "pdf",
+              header: "Invoice",
+              cell: (invoice) => (
+                <a
+                  href={`/api/documents/invoice/${invoice.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
+                >
+                  <Download className="size-3.5" /> PDF
+                </a>
+              ),
             },
           ]}
         />

@@ -1,4 +1,4 @@
-import { FileCheck2, FileWarning } from "lucide-react";
+import { Download, FileCheck2, FileWarning } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -142,18 +142,14 @@ export default async function CompliancePage() {
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      {certificate.pdfUrl ? (
-                        <a
-                          href={certificate.pdfUrl}
-                          className="text-sm text-brand-blue hover:underline"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Download
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Not generated</span>
-                      )}
+                      <a
+                        href={`/api/documents/certificate/${certificate.id}`}
+                        className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Download className="size-3.5" /> PDF
+                      </a>
                     </TableCell>
                   </TableRow>
                 );

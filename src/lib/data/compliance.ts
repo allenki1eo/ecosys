@@ -82,6 +82,38 @@ export async function expiringCertificates(scope: Scope, days = 30) {
     .orderBy(asc(certificates.expiresAt));
 }
 
+/** One certificate with everything its PDF needs, tenant-scoped. */
+export async function getCertificate(scope: Scope, certificateId: string) {
+  const [row] = await db
+    .select({
+      id: certificates.id,
+      reference: certificates.reference,
+      type: certificates.type,
+      issuedAt: certificates.issuedAt,
+      expiresAt: certificates.expiresAt,
+      authority: certificates.authority,
+      pdfUrl: certificates.pdfUrl,
+      clientId: certificates.clientId,
+      clientName: clients.name,
+      siteName: sites.name,
+      siteAddress: sites.address,
+      jobReference: jobs.reference,
+      reportSummary: jobs.reportSummary,
+      serviceName: serviceTypes.name,
+      issuedByName: users.name,
+    })
+    .from(certificates)
+    .innerJoin(clients, eq(certificates.clientId, clients.id))
+    .innerJoin(sites, eq(certificates.siteId, sites.id))
+    .leftJoin(jobs, eq(certificates.jobId, jobs.id))
+    .leftJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+    .leftJoin(users, eq(certificates.issuedBy, users.id))
+    .where(eq(certificates.id, certificateId))
+    .limit(1);
+
+  return assertTenant(scope, row, "certificate");
+}
+
 export async function issueCertificate(
   scope: Scope,
   input: {

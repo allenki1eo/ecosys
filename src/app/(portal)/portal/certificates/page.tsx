@@ -99,9 +99,9 @@ export default async function PortalCertificatesPage() {
               key: "document",
               header: "Document",
               cell: (certificate) =>
-                certificate.pdfUrl && canDownload ? (
+                canDownload ? (
                   <a
-                    href={certificate.pdfUrl}
+                    href={`/api/documents/certificate/${certificate.id}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
@@ -109,9 +109,7 @@ export default async function PortalCertificatesPage() {
                     <Download className="size-3.5" /> PDF
                   </a>
                 ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {canDownload ? "Being prepared" : "Ask your admin"}
-                  </span>
+                  <span className="text-xs text-muted-foreground">Ask your admin</span>
                 ),
             },
           ]}

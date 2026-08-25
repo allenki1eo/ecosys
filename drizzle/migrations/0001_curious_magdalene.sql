@@ -1,0 +1,96 @@
+CREATE TABLE `employees` (
+	`id` text PRIMARY KEY NOT NULL,
+	`employee_no` text NOT NULL,
+	`name` text NOT NULL,
+	`designation` text,
+	`department` text,
+	`employment_mode` text DEFAULT 'specified' NOT NULL,
+	`nida_number` text,
+	`nssf_number` text,
+	`bank_name` text,
+	`bank_account_no` text,
+	`phone` text,
+	`email` text,
+	`basic_salary` integer DEFAULT 0 NOT NULL,
+	`untaxable_allowance` integer DEFAULT 0 NOT NULL,
+	`responsibility_allowance` integer DEFAULT 0 NOT NULL,
+	`monthly_hours` integer DEFAULT 195 NOT NULL,
+	`start_date` integer,
+	`end_date` integer,
+	`is_active` integer DEFAULT true NOT NULL,
+	`user_id` text,
+	`notes` text,
+	`created_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `employees_employee_no_idx` ON `employees` (`employee_no`);--> statement-breakpoint
+CREATE INDEX `employees_active_idx` ON `employees` (`is_active`);--> statement-breakpoint
+CREATE TABLE `payroll_runs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`reference` text NOT NULL,
+	`period` text NOT NULL,
+	`label` text NOT NULL,
+	`status` text DEFAULT 'draft' NOT NULL,
+	`rates_json` text NOT NULL,
+	`total_gross` integer DEFAULT 0 NOT NULL,
+	`total_deductions` integer DEFAULT 0 NOT NULL,
+	`total_net_pay` integer DEFAULT 0 NOT NULL,
+	`total_employer_cost` integer DEFAULT 0 NOT NULL,
+	`employee_count` integer DEFAULT 0 NOT NULL,
+	`notes` text,
+	`created_by` text,
+	`finalised_at` integer,
+	`paid_at` integer,
+	`created_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
+	FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `payroll_runs_reference_idx` ON `payroll_runs` (`reference`);--> statement-breakpoint
+CREATE UNIQUE INDEX `payroll_runs_period_idx` ON `payroll_runs` (`period`);--> statement-breakpoint
+CREATE TABLE `payslips` (
+	`id` text PRIMARY KEY NOT NULL,
+	`payroll_run_id` text NOT NULL,
+	`employee_id` text NOT NULL,
+	`employee_no` text NOT NULL,
+	`employee_name` text NOT NULL,
+	`designation` text,
+	`employment_mode` text NOT NULL,
+	`nida_number` text,
+	`nssf_number` text,
+	`bank_name` text,
+	`bank_account_no` text,
+	`days_worked` integer DEFAULT 28 NOT NULL,
+	`earned_leave_days` integer DEFAULT 0 NOT NULL,
+	`sick_leave_days` integer DEFAULT 0 NOT NULL,
+	`basic_salary` integer NOT NULL,
+	`hourly_rate` integer DEFAULT 0 NOT NULL,
+	`overtime_normal_hours` real DEFAULT 0 NOT NULL,
+	`overtime_normal_amount` integer DEFAULT 0 NOT NULL,
+	`public_holiday_hours` real DEFAULT 0 NOT NULL,
+	`public_holiday_amount` integer DEFAULT 0 NOT NULL,
+	`responsibility_allowance` integer DEFAULT 0 NOT NULL,
+	`untaxable_allowance` integer DEFAULT 0 NOT NULL,
+	`gross_earnings` integer DEFAULT 0 NOT NULL,
+	`taxable_salary` integer DEFAULT 0 NOT NULL,
+	`paye` integer DEFAULT 0 NOT NULL,
+	`nssf_employee` integer DEFAULT 0 NOT NULL,
+	`loan_deduction` integer DEFAULT 0 NOT NULL,
+	`other_deductions` integer DEFAULT 0 NOT NULL,
+	`total_deductions` integer DEFAULT 0 NOT NULL,
+	`net_pay` integer DEFAULT 0 NOT NULL,
+	`total_earning` integer DEFAULT 0 NOT NULL,
+	`nssf_employer` integer DEFAULT 0 NOT NULL,
+	`sdl` integer DEFAULT 0 NOT NULL,
+	`wcf` integer DEFAULT 0 NOT NULL,
+	`employer_total_cost` integer DEFAULT 0 NOT NULL,
+	`notes` text,
+	`sent_at` integer,
+	`sent_to` text,
+	`created_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
+	FOREIGN KEY (`payroll_run_id`) REFERENCES `payroll_runs`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`employee_id`) REFERENCES `employees`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `payslips_run_idx` ON `payslips` (`payroll_run_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `payslips_run_employee_idx` ON `payslips` (`payroll_run_id`,`employee_id`);

@@ -18,6 +18,7 @@ import { db } from "../src/lib/db";
 import {
   auditLog,
   certificates,
+  employees,
   clients,
   equipment,
   equipmentMaintenance,
@@ -30,6 +31,8 @@ import {
   jobs,
   notifications,
   payments,
+  payrollRuns,
+  payslips,
   purchaseOrderItems,
   purchaseOrders,
   recurringJobTemplates,
@@ -70,6 +73,9 @@ async function clearAll() {
   const tables = [
     auditLog,
     notifications,
+    payslips,
+    payrollRuns,
+    employees,
     payments,
     invoiceLineItems,
     invoices,
@@ -734,6 +740,89 @@ async function main() {
       }
     }
   }
+
+  /* -------------------------------- payroll ------------------------------ */
+
+  console.log("Seeding employees and payroll…");
+  const { calculatePayslip, DEFAULT_RATES } = await import("../src/lib/payroll/calculate");
+
+  // Mirrors the July 2026 payroll sheet the company already runs.
+  const staffSeed = [
+    { no: "1", name: "Triphonia Dindili", designation: "Site Manager", basic: 350_000, transport: 65_000, bank: "Equity Bank" },
+    { no: "2", name: "David Lema", designation: "Technician", basic: 450_000, transport: 175_000, bank: "Equity Bank" },
+    { no: "3", name: "Vaileth Mkumbo", designation: "Technician", basic: 300_000, transport: 65_000, bank: "Equity Bank" },
+  ];
+
+  const employeeIds: { id: string; seed: (typeof staffSeed)[number] }[] = [];
+  for (const [index, person] of staffSeed.entries()) {
+    const id = newId("emp");
+    employeeIds.push({ id, seed: person });
+    await db.insert(employees).values({
+      id,
+      employeeNo: person.no,
+      name: person.name,
+      designation: person.designation,
+      employmentMode: "specified",
+      nssfNumber: `NSSF-${900000 + index}`,
+      bankName: person.bank,
+      bankAccountNo: `30012345678${index}`,
+      phone: `+2557550002${String(index).padStart(2, "0")}`,
+      basicSalary: person.basic,
+      untaxableAllowance: person.transport,
+      monthlyHours: 195,
+    });
+  }
+
+  // One finalised run for last month, so payslips and PDFs are there to look at.
+  const lastMonth = new Date();
+  lastMonth.setMonth(lastMonth.getMonth() - 1);
+  const period = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
+
+  const runId = newId("run");
+  let runGross = 0, runDeductions = 0, runNet = 0, runEmployer = 0;
+
+  await db.insert(payrollRuns).values({
+    id: runId,
+    reference: newReference("PAY"),
+    period,
+    label: `Payroll: ${period}`,
+    status: "finalised",
+    ratesJson: DEFAULT_RATES,
+    createdBy: staffIds["finance@ecohygiene.co.tz"],
+    finalisedAt: new Date(),
+  });
+
+  for (const { id: employeeId, seed: person } of employeeIds) {
+    const result = calculatePayslip(
+      { basicSalary: person.basic, untaxableAllowance: person.transport, monthlyHours: 195 },
+      DEFAULT_RATES,
+    );
+    runGross += result.grossEarnings;
+    runDeductions += result.totalDeductions;
+    runNet += result.totalEarning;
+    runEmployer += result.employerTotalCost;
+
+    await db.insert(payslips).values({
+      id: newId("slip"),
+      payrollRunId: runId,
+      employeeId,
+      employeeNo: person.no,
+      employeeName: person.name,
+      designation: person.designation,
+      employmentMode: "specified",
+      bankName: person.bank,
+      basicSalary: person.basic,
+      ...result,
+    });
+  }
+
+  await db.update(payrollRuns).set({
+    totalGross: runGross,
+    totalDeductions: runDeductions,
+    totalNetPay: runNet,
+    totalEmployerCost: runEmployer,
+    employeeCount: employeeIds.length,
+  }).where(eq(payrollRuns.id, runId));
 
   await db.insert(auditLog).values({
     id: newId("aud"),
