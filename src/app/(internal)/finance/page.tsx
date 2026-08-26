@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Receipt } from "lucide-react";
+import { Download, Receipt } from "lucide-react";
 
 import { GenerateInvoiceDialog, InvoiceStatusControl, SweepOverdueButton } from "./finance-controls";
 import { PageHeader } from "@/components/page-header";
@@ -151,6 +151,20 @@ export default async function FinancePage() {
               header: "Due",
               className: "text-muted-foreground",
               cell: (invoice) => formatDate(invoice.dueDate),
+            },
+            {
+              key: "pdf",
+              header: "PDF",
+              cell: (invoice) => (
+                <a
+                  href={`/api/documents/invoice/${invoice.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
+                >
+                  <Download className="size-3.5" /> Download
+                </a>
+              ),
             },
             ...(canManage
               ? [

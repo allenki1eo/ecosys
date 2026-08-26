@@ -174,7 +174,37 @@ surface:
 Series are assigned in fixed order and never cycled. Composition is drawn as a stacked bar rather
 than a pie — lengths compare, angles do not — and no chart uses two y-axes.
 
-## 8. Server/client boundary
+## 8. Payroll
+
+Employees live in their own table rather than in `users`: the two sets only partly overlap — a
+technician has both, a cleaner may have payroll and no login, a client contact has a login and no
+payroll.
+
+**Payslips snapshot their employee.** Name, designation, bank account and salary are copied onto
+the payslip when the run is created, not joined at read time. A payslip is a statement of what was
+paid on a date; giving someone a raise next month must not change what last month's payslip says.
+
+**Rates snapshot onto the run.** `payrollRuns.ratesJson` holds the NSSF, SDL, WCF and PAYE bands in
+force when the run was created, for the same reason.
+
+The arithmetic in `src/lib/payroll/calculate.ts` reproduces the company's existing spreadsheet to
+the shilling — all three employees on the July 2026 sheet reconcile across ten figures each. One
+deliberate difference from TRA guidance is documented there: the sheet assesses PAYE on basic pay
+rather than on basic less NSSF, and `payeOnBasic` keeps that behaviour as the default so the two
+agree. Set it to false to assess on taxable income instead.
+
+## 9. Documents
+
+Invoices, certificates and payslips render as PDFs on demand rather than being written to object
+storage. There is no stale copy to invalidate when an invoice is part-paid, and no bucket to
+configure before the feature works. Each route resolves its record through the normal repository
+call, so tenant scoping and permissions apply exactly as they do in the UI — a client can fetch
+their own invoice PDF and nobody else's, and payslips refuse a portal scope outright.
+
+Documents are black-on-white with brand green reserved for rules and headings: the dark UI theme
+would waste toner and read poorly on paper.
+
+## 10. Server/client boundary
 
 Repository modules import `server-only`, so a client component that reaches for one fails the
 build rather than leaking database code into the browser bundle. Two consequences worth knowing:
@@ -184,7 +214,7 @@ build rather than leaking database code into the browser bundle. Two consequence
   filters navigation by permission and passes the **hrefs**; `AppSidebar` imports the nav
   definition itself and resolves the icons client-side.
 
-## 9. Testing the isolation yourself
+## 11. Testing the isolation yourself
 
 ```bash
 npm run db:seed && npm run build && npm start

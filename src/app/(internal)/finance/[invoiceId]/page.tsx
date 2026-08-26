@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 
 import { RecordPaymentForm } from "../finance-controls";
 import { PageHeader } from "@/components/page-header";
@@ -34,7 +34,16 @@ export default async function InvoiceDetailPage({ params }: { params: { invoiceI
       <PageHeader
         title={invoice.number}
         description={`${invoice.clientName} · due ${formatDate(invoice.dueDate)}`}
-        actions={<InvoiceStatusBadge status={invoice.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <InvoiceStatusBadge status={invoice.status} />
+            <Button asChild size="sm" variant="outline">
+              <a href={`/api/documents/invoice/${invoice.id}`} target="_blank" rel="noreferrer">
+                <Download /> PDF
+              </a>
+            </Button>
+          </div>
+        }
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">

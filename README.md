@@ -131,6 +131,16 @@ reminder already in the outbox is never queued twice — so retries and manual t
 - Invoices generated from completed, unbilled jobs; payments, overdue sweep, revenue charts
 - User management, a live role-permission matrix, and a full audit log
 
+**Payroll** (`/payroll`) — employees with salary details, monthly runs that generate a payslip
+per active employee, PAYE / NSSF / SDL / WCF computed to Tanzanian rates, payslip PDFs, and
+sending payslips to staff by email or SMS. Statutory rates are snapshotted onto each run, so
+changing them never rewrites a payslip already issued.
+
+**Documents** — invoices, compliance certificates and payslips all render as PDFs on demand at
+`/api/documents/{invoice,certificate,payslip}/<id>`. Nothing is written to object storage, so
+there is no stale copy to invalidate and no bucket to configure. Each route applies the caller's
+scope: clients download their own invoices and certificates, payslips are internal-only.
+
 **Client portal** (`/portal/*`) — per-client overview, service history and job reports,
 downloadable certificates, incidents, invoices, ad-hoc service requests, and a site switcher for
 clients with multiple factories.
@@ -143,7 +153,13 @@ design, the job/stock/certificate flow, and the design-system decisions.
 ## Not yet built
 
 Phase 4 items from the spec remain open: route optimisation, offline-first PWA for field crews,
-WhatsApp Business integration, QR scan-to-log on equipment, and PDF rendering for certificates
-(the records and expiry tracking exist; `certificates.pdf_url` is populated by whatever generator
-you wire in). Photo upload currently takes a URL rather than performing the R2/Supabase upload —
-the storage envs are stubbed in `.env.example`.
+WhatsApp Business integration, and QR scan-to-log on equipment.
+
+Photo upload currently takes a URL rather than performing the R2/Supabase upload — the storage
+envs are stubbed in `.env.example`.
+
+Payslip delivery queues into the notification outbox and carries the figures in the message body;
+it does not attach the PDF. SMS cannot carry an attachment, and email delivery here is queue-first
+with no transport wired up yet — set one in `sendEmail()` (`src/lib/notifications.ts`) and
+`NOTIFICATIONS_ENABLED=true` to send for real. Until then the queue runs in dry-run mode and you
+can see exactly what would have gone out.

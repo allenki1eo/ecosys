@@ -617,6 +617,176 @@ export const payments = sqliteTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* Payroll                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export const EMPLOYMENT_MODES = ["specified", "unspecified", "casual"] as const;
+export type EmploymentMode = (typeof EMPLOYMENT_MODES)[number];
+
+export const PAYROLL_RUN_STATUSES = ["draft", "finalised", "paid"] as const;
+export type PayrollRunStatus = (typeof PAYROLL_RUN_STATUSES)[number];
+
+/**
+ * Ecohygiene's own staff, as payroll sees them. Kept separate from `users`
+ * because the two sets only partly overlap: a technician may have a login and
+ * a payroll record, a cleaner may have payroll and no login, and a client
+ * contact has a login and no payroll. `user_id` links them where both exist.
+ */
+export const employees = sqliteTable(
+  "employees",
+  {
+    id: text("id").primaryKey(),
+    /** Payroll number as it appears on the payslip. */
+    employeeNo: text("employee_no").notNull(),
+    name: text("name").notNull(),
+    designation: text("designation"),
+    department: text("department"),
+    employmentMode: text("employment_mode").$type<EmploymentMode>().notNull().default("specified"),
+    nidaNumber: text("nida_number"),
+    nssfNumber: text("nssf_number"),
+    bankName: text("bank_name"),
+    bankAccountNo: text("bank_account_no"),
+    phone: text("phone"),
+    email: text("email"),
+    /** Monthly basic salary in whole TZS. */
+    basicSalary: integer("basic_salary").notNull().default(0),
+    /** Paid on top of net pay and not subject to PAYE or NSSF (transport). */
+    untaxableAllowance: integer("untaxable_allowance").notNull().default(0),
+    responsibilityAllowance: integer("responsibility_allowance").notNull().default(0),
+    /** Hours in a standard month, used to derive the overtime hourly rate. */
+    monthlyHours: integer("monthly_hours").notNull().default(195),
+    startDate: integer("start_date", { mode: "timestamp_ms" }),
+    endDate: integer("end_date", { mode: "timestamp_ms" }),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    notes: text("notes"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(now),
+  },
+  (t) => ({
+    employeeNoIdx: uniqueIndex("employees_employee_no_idx").on(t.employeeNo),
+    activeIdx: index("employees_active_idx").on(t.isActive),
+  }),
+);
+
+/** Statutory rates, snapshotted onto each run — see `payrollRuns.ratesJson`. */
+export type PayrollRates = {
+  /** Employee NSSF contribution, as a fraction of basic pay. */
+  nssfEmployee: number;
+  /** Employer NSSF contribution, as a fraction of basic pay. */
+  nssfEmployer: number;
+  /** Skills & Development Levy, employer-borne. */
+  sdl: number;
+  /** Workers Compensation Fund, employer-borne. */
+  wcf: number;
+  /** Monthly PAYE bands, lowest first: income above `from` is taxed at `rate`. */
+  payeBands: { from: number; rate: number }[];
+};
+
+export const payrollRuns = sqliteTable(
+  "payroll_runs",
+  {
+    id: text("id").primaryKey(),
+    reference: text("reference").notNull(),
+    /** The month this run pays for, as `YYYY-MM`. */
+    period: text("period").notNull(),
+    label: text("label").notNull(),
+    status: text("status").$type<PayrollRunStatus>().notNull().default("draft"),
+    /**
+     * The statutory rates in force when the run was created. Snapshotted so a
+     * later rate change never rewrites a payslip that has already been issued.
+     */
+    ratesJson: text("rates_json", { mode: "json" }).$type<PayrollRates>().notNull(),
+    /** Materialised totals, so the list page needs no aggregate query. */
+    totalGross: integer("total_gross").notNull().default(0),
+    totalDeductions: integer("total_deductions").notNull().default(0),
+    totalNetPay: integer("total_net_pay").notNull().default(0),
+    totalEmployerCost: integer("total_employer_cost").notNull().default(0),
+    employeeCount: integer("employee_count").notNull().default(0),
+    notes: text("notes"),
+    createdBy: text("created_by").references(() => users.id),
+    finalisedAt: integer("finalised_at", { mode: "timestamp_ms" }),
+    paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(now),
+  },
+  (t) => ({
+    refIdx: uniqueIndex("payroll_runs_reference_idx").on(t.reference),
+    periodIdx: uniqueIndex("payroll_runs_period_idx").on(t.period),
+  }),
+);
+
+/**
+ * One employee's pay for one run. Identity and salary fields are copied rather
+ * than joined: a payslip is a statement of what was paid on a date, and must
+ * not change when someone is later given a raise or a new bank account.
+ */
+export const payslips = sqliteTable(
+  "payslips",
+  {
+    id: text("id").primaryKey(),
+    payrollRunId: text("payroll_run_id")
+      .notNull()
+      .references(() => payrollRuns.id, { onDelete: "cascade" }),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+
+    /* Snapshot of the employee at the time of the run. */
+    employeeNo: text("employee_no").notNull(),
+    employeeName: text("employee_name").notNull(),
+    designation: text("designation"),
+    employmentMode: text("employment_mode").$type<EmploymentMode>().notNull(),
+    nidaNumber: text("nida_number"),
+    nssfNumber: text("nssf_number"),
+    bankName: text("bank_name"),
+    bankAccountNo: text("bank_account_no"),
+
+    /* Attendance. */
+    daysWorked: integer("days_worked").notNull().default(28),
+    earnedLeaveDays: integer("earned_leave_days").notNull().default(0),
+    sickLeaveDays: integer("sick_leave_days").notNull().default(0),
+
+    /* Earnings. */
+    basicSalary: integer("basic_salary").notNull(),
+    hourlyRate: integer("hourly_rate").notNull().default(0),
+    overtimeNormalHours: real("overtime_normal_hours").notNull().default(0),
+    overtimeNormalAmount: integer("overtime_normal_amount").notNull().default(0),
+    publicHolidayHours: real("public_holiday_hours").notNull().default(0),
+    publicHolidayAmount: integer("public_holiday_amount").notNull().default(0),
+    responsibilityAllowance: integer("responsibility_allowance").notNull().default(0),
+    /** Not taxed and outside NSSF; paid on top of net pay. */
+    untaxableAllowance: integer("untaxable_allowance").notNull().default(0),
+    grossEarnings: integer("gross_earnings").notNull().default(0),
+
+    /* Employee deductions. */
+    taxableSalary: integer("taxable_salary").notNull().default(0),
+    paye: integer("paye").notNull().default(0),
+    nssfEmployee: integer("nssf_employee").notNull().default(0),
+    loanDeduction: integer("loan_deduction").notNull().default(0),
+    otherDeductions: integer("other_deductions").notNull().default(0),
+    totalDeductions: integer("total_deductions").notNull().default(0),
+    netPay: integer("net_pay").notNull().default(0),
+    /** Net pay plus the untaxable allowance — what actually reaches the bank. */
+    totalEarning: integer("total_earning").notNull().default(0),
+
+    /* Employer-borne cost. */
+    nssfEmployer: integer("nssf_employer").notNull().default(0),
+    sdl: integer("sdl").notNull().default(0),
+    wcf: integer("wcf").notNull().default(0),
+    employerTotalCost: integer("employer_total_cost").notNull().default(0),
+
+    notes: text("notes"),
+    /** Set when the payslip has been sent to the employee. */
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+    sentTo: text("sent_to"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(now),
+  },
+  (t) => ({
+    runIdx: index("payslips_run_idx").on(t.payrollRunId),
+    runEmployeeIdx: uniqueIndex("payslips_run_employee_idx").on(t.payrollRunId, t.employeeId),
+  }),
+);
+
+/* -------------------------------------------------------------------------- */
 /* Platform: audit trail and outbound notifications                            */
 /* -------------------------------------------------------------------------- */
 
@@ -739,3 +909,7 @@ export type Payment = typeof payments.$inferSelect;
 export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type ServiceRequest = typeof serviceRequests.$inferSelect;
 export type RecurringJobTemplate = typeof recurringJobTemplates.$inferSelect;
+export type Employee = typeof employees.$inferSelect;
+export type NewEmployee = typeof employees.$inferInsert;
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+export type Payslip = typeof payslips.$inferSelect;

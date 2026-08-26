@@ -60,6 +60,14 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    label: "Payroll",
+    permissions: [
+      { key: "payroll.view", label: "View payroll & employees" },
+      { key: "payroll.manage", label: "Run payroll, edit employees & salaries" },
+      { key: "payroll.send", label: "Send payslips to employees" },
+    ],
+  },
+  {
     label: "Reporting",
     permissions: [
       { key: "reports.view", label: "View analytics dashboards" },
@@ -139,6 +147,10 @@ export const ROLE_DEFAULTS: Record<UserRole, Permission[]> = {
     "costs.view",
     "reports.view",
     "reports.export",
+    // Salaries are finance's remit; operations and inventory never see them.
+    "payroll.view",
+    "payroll.manage",
+    "payroll.send",
   ],
   site_supervisor: [
     ...INTERNAL_READ_ONLY,

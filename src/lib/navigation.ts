@@ -8,6 +8,7 @@ import {
   Settings,
   ShieldAlert,
   Sparkles,
+  Wallet,
   Truck,
   Users,
 } from "lucide-react";
@@ -82,6 +83,13 @@ export const INTERNAL_NAV: NavSection[] = [
         icon: Receipt,
         permission: "invoices.view",
         description: "Invoices, payments and revenue",
+      },
+      {
+        href: "/payroll",
+        label: "Payroll",
+        icon: Wallet,
+        permission: "payroll.view",
+        description: "Salaries, payslips and statutory contributions",
       },
     ],
   },
