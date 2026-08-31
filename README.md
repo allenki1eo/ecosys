@@ -126,8 +126,9 @@ reminder already in the outbox is never queued twice — so retries and manual t
   per-service checklists, photo evidence and sign-off capture
 - Completing a job deducts the chemicals it consumed from stock and issues the compliance
   certificate its service type calls for
-- Inventory ledger (every stock change is a movement row), suppliers, purchase-order approval
-  flow, equipment location and maintenance
+- Inventory ledger (every stock change is a movement row), with per-location balances: see what
+  every company holds under **Inventory → By location**, or open an item to see where its stock
+  sits and how it got there. Plus suppliers, purchase-order approval, equipment and maintenance
 - Invoices generated from completed, unbilled jobs; payments, overdue sweep, revenue charts
 - User management, a live role-permission matrix, and a full audit log
 

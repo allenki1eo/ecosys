@@ -1,4 +1,5 @@
-import { Package, PackageX, Truck, Wrench } from "lucide-react";
+import Link from "next/link";
+import { Building2, MapPin, Package, PackageX, Truck, Warehouse, Wrench } from "lucide-react";
 
 import { PurchaseOrderActions } from "./po-actions";
 import { StockAdjustSheet } from "./stock-adjust-sheet";
@@ -19,7 +20,9 @@ import {
   listMovements,
   listPurchaseOrders,
   listSuppliers,
+  locationCounts,
   lowStockItems,
+  stockByLocation,
   stockValue,
 } from "@/lib/data/inventory";
 import { scopeFor } from "@/lib/data/scope";
@@ -31,17 +34,29 @@ export default async function InventoryPage() {
   const user = await requireStaff();
   const scope = scopeFor(user);
 
-  const [items, lowStock, movements, suppliers, purchaseOrders, equipment, sites, value] =
-    await Promise.all([
-      listInventory(scope),
-      lowStockItems(scope),
-      listMovements(scope, undefined, 60),
-      listSuppliers(scope),
-      listPurchaseOrders(scope),
-      listEquipment(scope),
-      listSites(scope),
-      user.permissions.has("costs.view") ? stockValue(scope) : Promise.resolve(0),
-    ]);
+  const [
+    items,
+    lowStock,
+    movements,
+    suppliers,
+    purchaseOrders,
+    equipment,
+    sites,
+    value,
+    locations,
+    placesPerItem,
+  ] = await Promise.all([
+    listInventory(scope),
+    lowStockItems(scope),
+    listMovements(scope, undefined, 60),
+    listSuppliers(scope),
+    listPurchaseOrders(scope),
+    listEquipment(scope),
+    listSites(scope),
+    user.permissions.has("costs.view") ? stockValue(scope) : Promise.resolve(0),
+    stockByLocation(scope),
+    locationCounts(scope),
+  ]);
 
   const canAdjust = user.permissions.has("inventory.adjust");
   const canApprove = user.permissions.has("inventory.approve_po");
@@ -82,6 +97,7 @@ export default async function InventoryPage() {
       <Tabs defaultValue="stock">
         <TabsList>
           <TabsTrigger value="stock">Stock</TabsTrigger>
+          <TabsTrigger value="locations">By location</TabsTrigger>
           <TabsTrigger value="movements">Movements</TabsTrigger>
           <TabsTrigger value="orders">Purchase orders</TabsTrigger>
           <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
@@ -135,8 +151,14 @@ export default async function InventoryPage() {
                       <TableRow key={item.id}>
                         <TableCell className="font-data">{item.sku}</TableCell>
                         <TableCell>
-                          {item.name}
-                          <span className="block text-xs text-muted-foreground">{item.location}</span>
+                          <Link href={`/inventory/${item.id}`} className="hover:underline">
+                            {item.name}
+                          </Link>
+                          <span className="block text-xs text-muted-foreground">
+                            {(placesPerItem[item.id] ?? 0) > 1
+                              ? `Held at ${placesPerItem[item.id]} locations`
+                              : item.location}
+                          </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {titleCase(item.category)}
@@ -167,6 +189,74 @@ export default async function InventoryPage() {
                   })}
                 </TableBody>
               </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="locations">
+          {locations.length === 0 ? (
+            <EmptyState
+              icon={MapPin}
+              title="Nothing in stock anywhere yet"
+              description="Record a purchase into the warehouse, then transfer stock out to the sites that hold it."
+            />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {locations.map((location) => (
+                <Card key={location.siteId ?? "warehouse"}>
+                  <CardContent className="space-y-3 p-5">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={
+                          location.siteId === null
+                            ? "flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-blue/10"
+                            : "flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-green/10"
+                        }
+                      >
+                        {location.siteId === null ? (
+                          <Warehouse className="size-4 text-brand-blue" />
+                        ) : (
+                          <Building2 className="size-4 text-brand-green" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {location.siteId ? (
+                          <Link
+                            href={`/clients/sites/${location.siteId}`}
+                            className="block truncate font-medium hover:underline"
+                          >
+                            {location.siteName}
+                          </Link>
+                        ) : (
+                          <span className="block truncate font-medium">{location.siteName}</span>
+                        )}
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {location.clientName ?? "Ecohygiene central store"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <dl className="grid grid-cols-2 gap-3 border-t pt-3">
+                      <div>
+                        <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                          Items held
+                        </dt>
+                        <dd className="font-data text-sm">{location.itemCount}</dd>
+                      </div>
+                      {user.permissions.has("costs.view") ? (
+                        <div>
+                          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Value
+                          </dt>
+                          <dd className="font-data text-sm">
+                            {formatCompactCurrency(location.totalValue)}
+                          </dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </TabsContent>

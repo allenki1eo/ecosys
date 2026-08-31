@@ -174,7 +174,30 @@ surface:
 Series are assigned in fixed order and never cycled. Composition is drawn as a stacked bar rather
 than a pie — lengths compare, angles do not — and no chart uses two y-axes.
 
-## 8. Payroll
+## 8. Where stock is held
+
+`inventory_movements.site_id` names the location a movement affects, with NULL meaning the central
+warehouse. The balance held anywhere is the sum of that location's deltas, and
+`inventoryItems.quantityOnHand` is the company-wide total across every location. Nothing stores a
+per-site balance: a second running total is a second number to drift.
+
+Two rules keep the ledger honest:
+
+- **A transfer writes two rows** — out of the source, into the destination. Moving a drum from the
+  warehouse to a client's chemical store changes *where* stock is without changing how much the
+  company holds, so the total is untouched. Writing one row made the totals drift every time stock
+  was deployed.
+- **Job usage draws from wherever the stock actually sits.** Some clients keep our chemicals in
+  their own store, so the crew draws that site down; elsewhere the crew carries drums from the
+  warehouse and the job site never holds stock at all. Charging every job to its own site drove
+  those sites permanently negative.
+
+Seeded data satisfies the same invariant: opening stock is booked in as a movement rather than set
+on the item, and every item's total is recomputed from its ledger once the movements are written.
+The result reconciles exactly — no item whose total differs from its ledger, and no negative
+balance anywhere.
+
+## 9. Payroll
 
 Employees live in their own table rather than in `users`: the two sets only partly overlap — a
 technician has both, a cleaner may have payroll and no login, a client contact has a login and no
@@ -193,7 +216,7 @@ deliberate difference from TRA guidance is documented there: the sheet assesses 
 rather than on basic less NSSF, and `payeOnBasic` keeps that behaviour as the default so the two
 agree. Set it to false to assess on taxable income instead.
 
-## 9. Documents
+## 10. Documents
 
 Invoices, certificates and payslips render as PDFs on demand rather than being written to object
 storage. There is no stale copy to invalidate when an invoice is part-paid, and no bucket to
@@ -204,7 +227,7 @@ their own invoice PDF and nobody else's, and payslips refuse a portal scope outr
 Documents are black-on-white with brand green reserved for rules and headings: the dark UI theme
 would waste toner and read poorly on paper.
 
-## 10. Server/client boundary
+## 11. Server/client boundary
 
 Repository modules import `server-only`, so a client component that reaches for one fails the
 build rather than leaking database code into the browser bundle. Two consequences worth knowing:
@@ -214,7 +237,7 @@ build rather than leaking database code into the browser bundle. Two consequence
   filters navigation by permission and passes the **hrefs**; `AppSidebar` imports the nav
   definition itself and resolves the icons client-side.
 
-## 11. Testing the isolation yourself
+## 12. Testing the isolation yourself
 
 ```bash
 npm run db:seed && npm run build && npm start

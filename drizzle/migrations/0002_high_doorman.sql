@@ -1,0 +1,1 @@
+CREATE INDEX `inventory_movements_site_item_idx` ON `inventory_movements` (`site_id`,`item_id`);
