@@ -11,6 +11,7 @@ import {
   setUserPermissionOverride,
   setUserRole,
   updateNotificationPreferences,
+  updateUserProfile,
 } from "@/lib/data/users";
 import { USER_ROLES } from "@db/schema";
 
@@ -49,6 +50,34 @@ export async function inviteUserAction(
     });
     revalidatePath("/admin/users");
     return { ok: true, data: id };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+const profileSchema = z.object({
+  name: z.string().min(2, "Enter their name"),
+  email: z.string().email("Enter a valid email"),
+  phone: z.string().optional(),
+});
+
+export async function updateUserAction(
+  userId: string,
+  _prev: ActionResult | undefined,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const { scope } = await withScope("users.manage");
+    const parsed = profileSchema.safeParse(Object.fromEntries(formData));
+    if (!parsed.success) {
+      return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form" };
+    }
+    await updateUserProfile(scope, userId, {
+      ...parsed.data,
+      phone: parsed.data.phone || null,
+    });
+    revalidatePath("/admin/users");
+    return { ok: true };
   } catch (error) {
     return actionError(error);
   }

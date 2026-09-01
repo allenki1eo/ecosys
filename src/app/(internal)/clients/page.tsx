@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Building2, MapPin, Receipt, Truck } from "lucide-react";
 
-import { NewClientSheet } from "./client-forms";
+import { ClientFormSheet } from "./client-forms";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { ClientStatusBadge } from "@/components/status-badge";
@@ -42,7 +42,7 @@ export default async function ClientsPage() {
       <PageHeader
         title="Clients"
         description="Every company Ecohygiene serves, with their sites, workload and contract position."
-        actions={canManage ? <NewClientSheet /> : null}
+        actions={canManage ? <ClientFormSheet /> : null}
       />
 
       {clients.length === 0 ? (
@@ -50,7 +50,7 @@ export default async function ClientsPage() {
           icon={Building2}
           title="No clients yet"
           description="Add your first client company to start scheduling work and issuing certificates."
-          action={canManage ? <NewClientSheet /> : undefined}
+          action={canManage ? <ClientFormSheet /> : undefined}
         />
       ) : (
         <>

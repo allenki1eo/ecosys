@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Wrench } from "lucide-react";
 
+import { SiteFormSheet } from "../../client-forms";
 import { PageHeader } from "@/components/page-header";
 import { JobStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,23 @@ export default async function SiteDetailPage({ params }: { params: { siteId: str
       <PageHeader
         title={site.name}
         description={[site.address, site.region].filter(Boolean).join(" · ") || "No address recorded"}
+        actions={
+          user.permissions.has("clients.manage") ? (
+            <SiteFormSheet
+              site={{
+                id: site.id,
+                name: site.name,
+                address: site.address,
+                region: site.region,
+                gpsLat: site.gpsLat,
+                gpsLng: site.gpsLng,
+                contactName: site.contactName,
+                contactPhone: site.contactPhone,
+                notes: site.notes,
+              }}
+            />
+          ) : null
+        }
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">

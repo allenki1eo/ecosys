@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { Building2, MapPin, Package, PackageX, Truck, Warehouse, Wrench } from "lucide-react";
 
+import {
+  DeleteSupplierButton,
+  EquipmentFormSheet,
+  ItemFormSheet,
+  MaintenanceDialog,
+  PurchaseOrderSheet,
+  SupplierFormSheet,
+} from "./inventory-forms";
 import { PurchaseOrderActions } from "./po-actions";
 import { StockAdjustSheet } from "./stock-adjust-sheet";
 import { PageHeader } from "@/components/page-header";
@@ -60,6 +68,10 @@ export default async function InventoryPage() {
 
   const canAdjust = user.permissions.has("inventory.adjust");
   const canApprove = user.permissions.has("inventory.approve_po");
+  const canRequestPo = user.permissions.has("inventory.request_po");
+  const canManageEquipment = user.permissions.has("inventory.manage_equipment");
+  const canSeeCosts = user.permissions.has("costs.view");
+  const supplierOptions = suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }));
   const deployed = equipment.filter((piece) => piece.status === "deployed").length;
 
   return (
@@ -67,7 +79,14 @@ export default async function InventoryPage() {
       <PageHeader
         title="Inventory"
         description="Chemical stock, mixing-unit allocations, suppliers and equipment."
-        actions={canAdjust ? <StockAdjustSheet items={items} sites={sites} /> : null}
+        actions={
+          canAdjust ? (
+            <div className="flex flex-wrap gap-2">
+              <ItemFormSheet suppliers={supplierOptions} sites={sites} canSeeCosts={canSeeCosts} />
+              <StockAdjustSheet items={items} sites={sites} />
+            </div>
+          ) : null
+        }
       />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -129,6 +148,15 @@ export default async function InventoryPage() {
               icon={Package}
               title="No stock items"
               description="Add chemicals and consumables so job usage can be deducted automatically."
+              action={
+                canAdjust ? (
+                  <ItemFormSheet
+                    suppliers={supplierOptions}
+                    sites={sites}
+                    canSeeCosts={canSeeCosts}
+                  />
+                ) : undefined
+              }
             />
           ) : (
             <div className="rounded-lg border">
@@ -142,6 +170,7 @@ export default async function InventoryPage() {
                     <TableHead>Reorder at</TableHead>
                     {user.permissions.has("costs.view") ? <TableHead>Unit cost</TableHead> : null}
                     <TableHead>Supplier</TableHead>
+                    {canAdjust ? <TableHead className="text-right">Manage</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -184,6 +213,25 @@ export default async function InventoryPage() {
                         <TableCell className="text-muted-foreground">
                           {item.supplierName ?? "—"}
                         </TableCell>
+                        {canAdjust ? (
+                          <TableCell className="text-right">
+                            <ItemFormSheet
+                              suppliers={supplierOptions}
+                              canSeeCosts={canSeeCosts}
+                              item={{
+                                id: item.id,
+                                sku: item.sku,
+                                name: item.name,
+                                category: item.category,
+                                unit: item.unit,
+                                reorderThreshold: item.reorderThreshold,
+                                costPerUnit: item.costPerUnit,
+                                supplierId: item.supplierId,
+                                location: item.location,
+                              }}
+                            />
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     );
                   })}
@@ -314,12 +362,22 @@ export default async function InventoryPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="orders">
+        <TabsContent value="orders" className="space-y-4">
+          {canRequestPo ? (
+            <div className="flex justify-end">
+              <PurchaseOrderSheet suppliers={supplierOptions} items={items} />
+            </div>
+          ) : null}
           {purchaseOrders.length === 0 ? (
             <EmptyState
               icon={Truck}
               title="No purchase orders"
               description="Reorder requests raised against low stock appear here for approval."
+              action={
+                canRequestPo ? (
+                  <PurchaseOrderSheet suppliers={supplierOptions} items={items} />
+                ) : undefined
+              }
             />
           ) : (
             <div className="rounded-lg border">
@@ -363,9 +421,18 @@ export default async function InventoryPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="suppliers">
+        <TabsContent value="suppliers" className="space-y-4">
+          {canAdjust ? (
+            <div className="flex justify-end">
+              <SupplierFormSheet />
+            </div>
+          ) : null}
           {suppliers.length === 0 ? (
-            <EmptyState title="No suppliers" description="Add suppliers to track lead times and pricing." />
+            <EmptyState
+              title="No suppliers"
+              description="Add suppliers to track lead times and pricing."
+              action={canAdjust ? <SupplierFormSheet /> : undefined}
+            />
           ) : (
             <div className="rounded-lg border">
               <Table>
@@ -375,6 +442,7 @@ export default async function InventoryPage() {
                     <TableHead>Contact</TableHead>
                     <TableHead>Lead time</TableHead>
                     <TableHead>Items supplied</TableHead>
+                    {canAdjust ? <TableHead className="text-right">Manage</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -389,6 +457,25 @@ export default async function InventoryPage() {
                       </TableCell>
                       <TableCell className="font-data">{supplier.leadTimeDays} days</TableCell>
                       <TableCell className="font-data">{supplier.itemCount}</TableCell>
+                      {canAdjust ? (
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <SupplierFormSheet
+                              supplier={{
+                                id: supplier.id,
+                                name: supplier.name,
+                                contact: supplier.contact,
+                                email: supplier.email,
+                                phone: supplier.phone,
+                                leadTimeDays: supplier.leadTimeDays,
+                              }}
+                            />
+                            {supplier.itemCount === 0 ? (
+                              <DeleteSupplierButton supplierId={supplier.id} />
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -397,12 +484,18 @@ export default async function InventoryPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="equipment">
+        <TabsContent value="equipment" className="space-y-4">
+          {canManageEquipment ? (
+            <div className="flex justify-end">
+              <EquipmentFormSheet sites={sites} />
+            </div>
+          ) : null}
           {equipment.length === 0 ? (
             <EmptyState
               icon={Wrench}
               title="No equipment tracked"
               description="Register sprayers and mixing units to track location and maintenance."
+              action={canManageEquipment ? <EquipmentFormSheet sites={sites} /> : undefined}
             />
           ) : (
             <div className="rounded-lg border">
@@ -415,6 +508,9 @@ export default async function InventoryPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Last service</TableHead>
                     <TableHead>Next due</TableHead>
+                    {canManageEquipment ? (
+                      <TableHead className="text-right">Manage</TableHead>
+                    ) : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -443,6 +539,27 @@ export default async function InventoryPage() {
                       <TableCell className="text-muted-foreground">
                         {formatDate(piece.nextMaintenanceAt)}
                       </TableCell>
+                      {canManageEquipment ? (
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <MaintenanceDialog
+                              equipmentId={piece.id}
+                              equipmentName={piece.name}
+                            />
+                            <EquipmentFormSheet
+                              sites={sites}
+                              equipment={{
+                                id: piece.id,
+                                name: piece.name,
+                                type: piece.type,
+                                serialNumber: piece.serialNumber,
+                                siteId: piece.siteId,
+                                status: piece.status,
+                              }}
+                            />
+                          </div>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   ))}
                 </TableBody>

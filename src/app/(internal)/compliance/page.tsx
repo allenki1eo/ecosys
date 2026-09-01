@@ -1,5 +1,6 @@
 import { Download, FileCheck2, FileWarning } from "lucide-react";
 
+import { IssueCertificateDialog } from "./certificate-form";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireStaff } from "@/lib/auth/guards";
 import { CERTIFICATE_LABELS, expiringCertificates, listCertificates } from "@/lib/data/compliance";
+import { listSites } from "@/lib/data/clients";
 import { scopeFor } from "@/lib/data/scope";
 import { daysUntil, formatDate } from "@/lib/format";
 
@@ -18,9 +20,11 @@ export default async function CompliancePage() {
   const user = await requireStaff();
   const scope = scopeFor(user);
 
-  const [certificates, expiring] = await Promise.all([
+  const canIssue = user.permissions.has("certificates.issue");
+  const [certificates, expiring, sites] = await Promise.all([
     listCertificates(scope),
     expiringCertificates(scope, 30),
+    canIssue ? listSites(scope) : Promise.resolve([]),
   ]);
 
   const valid = certificates.filter(
@@ -33,11 +37,14 @@ export default async function CompliancePage() {
         title="Compliance"
         description="Certificates issued from completed services, ready for TBS, TFDA and NEMC inspections."
         actions={
-          user.permissions.has("reports.export") ? (
-            <Button size="sm" variant="outline" disabled title="Bundled PDF export — Phase 2">
-              Export audit bundle
-            </Button>
-          ) : null
+          <div className="flex flex-wrap gap-2">
+            {canIssue ? <IssueCertificateDialog sites={sites} /> : null}
+            {user.permissions.has("reports.export") ? (
+              <Button size="sm" variant="outline" disabled title="Bundled PDF export — Phase 2">
+                Export audit bundle
+              </Button>
+            ) : null}
+          </div>
         }
       />
 

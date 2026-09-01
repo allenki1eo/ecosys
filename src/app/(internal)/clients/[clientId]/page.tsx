@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin } from "lucide-react";
 
-import { NewSiteSheet } from "../client-forms";
+import { ClientFormSheet, SiteFormSheet } from "../client-forms";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import {
@@ -57,9 +57,29 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
         title={client.name}
         description={`${client.industry ?? "Industry not set"} · contract ${formatDate(client.contractStart)} – ${formatDate(client.contractEnd)}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ClientStatusBadge status={client.status} />
-            {user.permissions.has("clients.manage") ? <NewSiteSheet clientId={client.id} /> : null}
+            {user.permissions.has("clients.manage") ? (
+              <>
+                <ClientFormSheet
+                  client={{
+                    id: client.id,
+                    name: client.name,
+                    slug: client.slug,
+                    industry: client.industry,
+                    contractStart: client.contractStart,
+                    contractEnd: client.contractEnd,
+                    billingContact: client.billingContact,
+                    billingEmail: client.billingEmail,
+                    billingPhone: client.billingPhone,
+                    paymentTermsDays: client.paymentTermsDays,
+                    status: client.status,
+                    specNotes: client.specNotes,
+                  }}
+                />
+                <SiteFormSheet clientId={client.id} />
+              </>
+            ) : null}
           </div>
         }
       />
@@ -104,7 +124,7 @@ export default async function ClientDetailPage({ params }: { params: { clientId:
               title="No sites yet"
               description="Add the client's factories or premises so jobs can be scheduled against them."
               action={
-                user.permissions.has("clients.manage") ? <NewSiteSheet clientId={client.id} /> : undefined
+                user.permissions.has("clients.manage") ? <SiteFormSheet clientId={client.id} /> : undefined
               }
             />
           ) : (

@@ -3,10 +3,15 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
-import { UserPlus } from "lucide-react";
+import { Pencil, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
-import { inviteUserAction, setUserActiveAction, setUserRoleAction } from "../actions";
+import {
+  inviteUserAction,
+  setUserActiveAction,
+  setUserRoleAction,
+  updateUserAction,
+} from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -141,6 +146,94 @@ export function InviteUserSheet({ clients }: { clients: { id: string; name: stri
         </form>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** Name, email and phone. Role, access and password have their own paths. */
+export function EditUserSheet({
+  user,
+}: {
+  user: { id: string; name: string; email: string; phone: string | null };
+}) {
+  const [open, setOpen] = React.useState(false);
+  const router = useRouter();
+  const [state, formAction] = useFormState(
+    updateUserAction.bind(null, user.id),
+    undefined as ActionResult | undefined,
+  );
+
+  React.useEffect(() => {
+    if (!state) return;
+    if (state.ok) {
+      toast.success("User updated");
+      setOpen(false);
+      router.refresh();
+    } else {
+      toast.error(state.error);
+    }
+  }, [state, router]);
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="sm">
+          <Pencil /> Edit
+        </Button>
+      </SheetTrigger>
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>{user.name}</SheetTitle>
+          <SheetDescription>
+            Their contact details. Role and access are changed from the row itself, and a password
+            reset is done by re-running the admin script.
+          </SheetDescription>
+        </SheetHeader>
+
+        <form action={formAction} className="flex flex-1 flex-col">
+          <div className="flex-1 space-y-4 p-5">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Full name</Label>
+              <Input id="edit-name" name="name" defaultValue={user.name} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                name="email"
+                type="email"
+                defaultValue={user.email}
+                required
+              />
+              <p className="text-xs text-muted-foreground">This is what they sign in with.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone</Label>
+              <Input
+                id="edit-phone"
+                name="phone"
+                defaultValue={user.phone ?? ""}
+                placeholder="+255…"
+              />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <SaveButton />
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function SaveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "Saving…" : "Save changes"}
+    </Button>
   );
 }
 

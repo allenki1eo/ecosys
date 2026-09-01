@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { actionError, withScope, type ActionResult } from "@/lib/actions";
-import { createClient, createSite, updateClient } from "@/lib/data/clients";
+import { createClient, createSite, updateClient, updateSite } from "@/lib/data/clients";
 import { CLIENT_STATUSES } from "@db/schema";
 
 const slug = z
@@ -111,6 +111,33 @@ export async function createSiteAction(
     const id = await createSite(scope, parsed.data);
     revalidatePath(`/clients/${parsed.data.clientId}`);
     return { ok: true, data: id };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function updateSiteAction(
+  siteId: string,
+  _prev: ActionResult | undefined,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const { scope } = await withScope("clients.manage");
+    const raw = Object.fromEntries(formData);
+    // A site never changes hands, so the owning client is not editable.
+    const parsed = siteSchema.omit({ clientId: true }).safeParse({
+      ...raw,
+      gpsLat: raw.gpsLat || undefined,
+      gpsLng: raw.gpsLng || undefined,
+    });
+    if (!parsed.success) {
+      return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form" };
+    }
+
+    await updateSite(scope, siteId, parsed.data);
+    revalidatePath(`/clients/sites/${siteId}`);
+    revalidatePath("/clients");
+    return { ok: true };
   } catch (error) {
     return actionError(error);
   }

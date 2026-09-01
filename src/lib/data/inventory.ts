@@ -15,6 +15,7 @@ import {
   sites,
   suppliers,
   users,
+  type EquipmentStatus,
   type PurchaseOrderStatus,
 } from "@db/schema";
 import { newId, newReference } from "@/lib/ids";
@@ -363,28 +364,133 @@ export async function getInventoryItem(scope: Scope, itemId: string) {
   return { ...item, locations, movements };
 }
 
+export type InventoryItemInput = {
+  sku: string;
+  name: string;
+  category: "chemical" | "consumable" | "ppe" | "spare_part";
+  unit: string;
+  reorderThreshold?: number;
+  costPerUnit?: number;
+  supplierId?: string | null;
+  location?: string;
+};
+
 export async function createInventoryItem(
   scope: Scope,
-  input: {
-    sku: string;
-    name: string;
-    category: "chemical" | "consumable" | "ppe" | "spare_part";
-    unit: string;
-    quantityOnHand?: number;
-    reorderThreshold?: number;
-    costPerUnit?: number;
-    supplierId?: string | null;
-    location?: string;
+  input: InventoryItemInput & {
+    /** Stock already on the shelf when the item is first recorded. */
+    openingQuantity?: number;
+    /** Where that opening stock sits. NULL is the warehouse. */
+    openingSiteId?: string | null;
   },
 ) {
   assertInternal(scope);
+
+  const [clash] = await db
+    .select({ id: inventoryItems.id })
+    .from(inventoryItems)
+    .where(eq(inventoryItems.sku, input.sku))
+    .limit(1);
+  if (clash) throw new Error(`SKU ${input.sku} is already used by another item.`);
+
+  const { openingQuantity = 0, openingSiteId = null, ...fields } = input;
   const id = newId("itm");
-  await db.insert(inventoryItems).values({ id, ...input });
+  await db.insert(inventoryItems).values({ id, ...fields });
+
+  // Opening stock is booked in as a movement rather than written onto the item.
+  // Anything set directly would be invisible to the per-location balances, which
+  // are summed from the ledger — the item's total would not reconcile.
+  if (openingQuantity > 0) {
+    await recordMovement(scope, {
+      itemId: id,
+      quantityDelta: openingQuantity,
+      reason: "adjustment",
+      siteId: openingSiteId,
+      notes: "Opening stock",
+    });
+  }
+
   await recordAudit(scope, "inventory.item_create", "inventory_item", id, { sku: input.sku });
   return id;
 }
 
+/**
+ * Everything about an item except how much of it there is. Quantity only ever
+ * moves through `recordMovement`, so that the ledger stays the whole story.
+ */
+export async function updateInventoryItem(
+  scope: Scope,
+  itemId: string,
+  input: InventoryItemInput,
+) {
+  assertInternal(scope);
+
+  const [clash] = await db
+    .select({ id: inventoryItems.id })
+    .from(inventoryItems)
+    .where(and(eq(inventoryItems.sku, input.sku), sql`"inventory_items"."id" != ${itemId}`))
+    .limit(1);
+  if (clash) throw new Error(`SKU ${input.sku} is already used by another item.`);
+
+  await db.update(inventoryItems).set(input).where(eq(inventoryItems.id, itemId));
+  await recordAudit(scope, "inventory.item_update", "inventory_item", itemId, { sku: input.sku });
+}
+
+/**
+ * Retires an item without deleting it: movements already recorded against it
+ * are part of the ledger and must keep resolving.
+ */
+export async function setInventoryItemActive(scope: Scope, itemId: string, isActive: boolean) {
+  assertInternal(scope);
+  await db.update(inventoryItems).set({ isActive }).where(eq(inventoryItems.id, itemId));
+  await recordAudit(
+    scope,
+    isActive ? "inventory.item_restore" : "inventory.item_retire",
+    "inventory_item",
+    itemId,
+    {},
+  );
+}
+
 /* -------------------------------- suppliers ------------------------------- */
+
+export type SupplierInput = {
+  name: string;
+  contact?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  leadTimeDays: number;
+  notes?: string | null;
+};
+
+export async function createSupplier(scope: Scope, input: SupplierInput) {
+  assertInternal(scope);
+  const id = newId("sup");
+  await db.insert(suppliers).values({ id, ...input });
+  await recordAudit(scope, "supplier.create", "supplier", id, { name: input.name });
+  return id;
+}
+
+export async function updateSupplier(scope: Scope, supplierId: string, input: SupplierInput) {
+  assertInternal(scope);
+  await db.update(suppliers).set(input).where(eq(suppliers.id, supplierId));
+  await recordAudit(scope, "supplier.update", "supplier", supplierId, { name: input.name });
+}
+
+export async function deleteSupplier(scope: Scope, supplierId: string) {
+  assertInternal(scope);
+  const [{ count } = { count: 0 }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(inventoryItems)
+    .where(eq(inventoryItems.supplierId, supplierId));
+  if (Number(count) > 0) {
+    throw new Error(
+      `${count} item${Number(count) === 1 ? " is" : "s are"} supplied by them. Point those items at another supplier first.`,
+    );
+  }
+  await db.delete(suppliers).where(eq(suppliers.id, supplierId));
+  await recordAudit(scope, "supplier.delete", "supplier", supplierId, {});
+}
 
 export async function listSuppliers(scope: Scope) {
   assertInternal(scope);
@@ -519,6 +625,41 @@ export async function listEquipment(scope: Scope) {
     .from(equipment)
     .leftJoin(sites, eq(equipment.currentSiteId, sites.id))
     .orderBy(asc(equipment.name));
+}
+
+export type EquipmentInput = {
+  name: string;
+  type: "sprayer" | "mixing_unit" | "vehicle" | "meter" | "other";
+  serialNumber?: string | null;
+  currentSiteId?: string | null;
+  status: EquipmentStatus;
+  notes?: string | null;
+};
+
+export async function createEquipment(scope: Scope, input: EquipmentInput) {
+  assertInternal(scope);
+  if (!hasPermission(scope, "inventory.manage_equipment")) {
+    throw new Error("Missing permission: inventory.manage_equipment");
+  }
+  const id = newId("eqp");
+  await db.insert(equipment).values({
+    id,
+    ...input,
+    // The QR payload is the id, so a sticker printed today still resolves after
+    // the piece is renamed or moved.
+    qrCode: id,
+  });
+  await recordAudit(scope, "equipment.create", "equipment", id, { name: input.name });
+  return id;
+}
+
+export async function updateEquipment(scope: Scope, equipmentId: string, input: EquipmentInput) {
+  assertInternal(scope);
+  if (!hasPermission(scope, "inventory.manage_equipment")) {
+    throw new Error("Missing permission: inventory.manage_equipment");
+  }
+  await db.update(equipment).set(input).where(eq(equipment.id, equipmentId));
+  await recordAudit(scope, "equipment.update", "equipment", equipmentId, { name: input.name });
 }
 
 export async function moveEquipment(scope: Scope, equipmentId: string, siteId: string | null) {
