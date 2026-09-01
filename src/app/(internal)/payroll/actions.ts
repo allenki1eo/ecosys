@@ -133,16 +133,24 @@ export async function createPayrollRunAction(
   }
 }
 
+/** An empty number field means "leave it alone", not zero. */
+const optionalInt = z
+  .union([z.literal(""), z.coerce.number().int().min(0)])
+  .optional()
+  .transform((value) => (value === "" || value === undefined ? undefined : value));
+
 const adjustmentSchema = z.object({
   daysWorked: z.coerce.number().int().min(0).max(31).optional(),
   earnedLeaveDays: z.coerce.number().int().min(0).max(31).optional(),
   sickLeaveDays: z.coerce.number().int().min(0).max(31).optional(),
   overtimeNormalHours: z.coerce.number().min(0).max(400).optional(),
   publicHolidayHours: z.coerce.number().min(0).max(400).optional(),
-  responsibilityAllowance: z.coerce.number().int().min(0).optional(),
-  untaxableAllowance: z.coerce.number().int().min(0).optional(),
-  loanDeduction: z.coerce.number().int().min(0).optional(),
-  otherDeductions: z.coerce.number().int().min(0).optional(),
+  responsibilityAllowance: optionalInt,
+  untaxableAllowance: optionalInt,
+  loanDeduction: optionalInt,
+  otherDeductions: optionalInt,
+  /** Blank returns PAYE to the bands; a figure overrides them. */
+  payeOverride: optionalInt,
   notes: z.string().max(300).optional(),
 });
 
@@ -157,7 +165,13 @@ export async function adjustPayslipAction(
     if (!parsed.success) {
       return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form" };
     }
-    await adjustPayslip(scope, payslipId, { ...parsed.data, notes: parsed.data.notes || null });
+    await adjustPayslip(scope, payslipId, {
+      ...parsed.data,
+      // Distinguish "left blank" from "not submitted": the form always posts the
+      // field, so a blank one is an instruction to clear the override.
+      payeOverride: formData.has("payeOverride") ? (parsed.data.payeOverride ?? null) : undefined,
+      notes: parsed.data.notes || null,
+    });
     revalidatePath("/payroll");
     return { ok: true };
   } catch (error) {

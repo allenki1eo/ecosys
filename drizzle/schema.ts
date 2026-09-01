@@ -630,6 +630,14 @@ export const PAYROLL_RUN_STATUSES = ["draft", "finalised", "paid"] as const;
 export type PayrollRunStatus = (typeof PAYROLL_RUN_STATUSES)[number];
 
 /**
+ * A loan is repaid over several months; an advance is drawn against a salary
+ * not yet paid and normally cleared in one. They behave identically here — the
+ * distinction is what the payslip and the ledger call it.
+ */
+export const LOAN_KINDS = ["loan", "advance"] as const;
+export type LoanKind = (typeof LOAN_KINDS)[number];
+
+/**
  * Ecohygiene's own staff, as payroll sees them. Kept separate from `users`
  * because the two sets only partly overlap: a technician may have a login and
  * a payroll record, a cleaner may have payroll and no login, and a client
@@ -763,6 +771,12 @@ export const payslips = sqliteTable(
     /* Employee deductions. */
     taxableSalary: integer("taxable_salary").notNull().default(0),
     paye: integer("paye").notNull().default(0),
+    /**
+     * A PAYE figure typed in by hand, which wins over the computed one. Null
+     * means "use the bands". Kept separate from `paye` so that re-running the
+     * calculation after any other edit does not silently discard it.
+     */
+    payeOverride: integer("paye_override"),
     nssfEmployee: integer("nssf_employee").notNull().default(0),
     loanDeduction: integer("loan_deduction").notNull().default(0),
     otherDeductions: integer("other_deductions").notNull().default(0),
@@ -786,6 +800,74 @@ export const payslips = sqliteTable(
   (t) => ({
     runIdx: index("payslips_run_idx").on(t.payrollRunId),
     runEmployeeIdx: uniqueIndex("payslips_run_employee_idx").on(t.payrollRunId, t.employeeId),
+  }),
+);
+
+/**
+ * Money advanced to an employee and recovered from their pay.
+ *
+ * The outstanding balance is *not* stored: it is the principal less the
+ * repayments booked against it. A second running total is a second number to
+ * drift, and this one would drift every time a run was reopened.
+ */
+export const employeeLoans = sqliteTable(
+  "employee_loans",
+  {
+    id: text("id").primaryKey(),
+    reference: text("reference").notNull(),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<LoanKind>().notNull().default("loan"),
+    /** Amount handed over, in whole TZS. */
+    principal: integer("principal").notNull(),
+    /** Recovered from each payslip until the balance clears. */
+    monthlyDeduction: integer("monthly_deduction").notNull(),
+    /** First month to deduct from, as `YYYY-MM`. Runs before it are skipped. */
+    startPeriod: text("start_period").notNull(),
+    issuedOn: integer("issued_on", { mode: "timestamp_ms" }).notNull().default(now),
+    reason: text("reason"),
+    notes: text("notes"),
+    /**
+     * Set when the balance is written off or the loan was recorded in error.
+     * Settlement is not a status — it is what a zero balance means.
+     */
+    cancelledAt: integer("cancelled_at", { mode: "timestamp_ms" }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(now),
+  },
+  (t) => ({
+    refIdx: uniqueIndex("employee_loans_reference_idx").on(t.reference),
+    employeeIdx: index("employee_loans_employee_idx").on(t.employeeId),
+  }),
+);
+
+/**
+ * Append-only repayment ledger. A row with a `payslip_id` was recovered from
+ * pay; one without was paid back directly (cash, or a bank transfer).
+ *
+ * A payslip-linked row only counts against the balance once its run leaves
+ * draft — a proposed deduction on a run that may still be deleted has not been
+ * repaid. That is a join, deliberately, rather than a status column to keep in
+ * step with the run.
+ */
+export const loanRepayments = sqliteTable(
+  "loan_repayments",
+  {
+    id: text("id").primaryKey(),
+    loanId: text("loan_id")
+      .notNull()
+      .references(() => employeeLoans.id, { onDelete: "cascade" }),
+    payslipId: text("payslip_id").references(() => payslips.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(),
+    /** The month this repayment belongs to, as `YYYY-MM`. */
+    period: text("period").notNull(),
+    note: text("note"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(now),
+  },
+  (t) => ({
+    loanIdx: index("loan_repayments_loan_idx").on(t.loanId),
+    payslipIdx: index("loan_repayments_payslip_idx").on(t.payslipId),
   }),
 );
 
@@ -916,3 +998,5 @@ export type Employee = typeof employees.$inferSelect;
 export type NewEmployee = typeof employees.$inferInsert;
 export type PayrollRun = typeof payrollRuns.$inferSelect;
 export type Payslip = typeof payslips.$inferSelect;
+export type EmployeeLoan = typeof employeeLoans.$inferSelect;
+export type LoanRepayment = typeof loanRepayments.$inferSelect;

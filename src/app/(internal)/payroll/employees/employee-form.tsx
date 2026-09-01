@@ -176,7 +176,7 @@ export function EmployeeFormSheet({ employee }: { employee?: EmployeeFormValues 
                     name="basicSalary"
                     type="number"
                     min={0}
-                    step={1000}
+                    step="any"
                     value={basic}
                     onChange={(event) => setBasic(Number(event.target.value))}
                     required
@@ -189,7 +189,7 @@ export function EmployeeFormSheet({ employee }: { employee?: EmployeeFormValues 
                     name="untaxableAllowance"
                     type="number"
                     min={0}
-                    step={1000}
+                    step="any"
                     value={untaxable}
                     onChange={(event) => setUntaxable(Number(event.target.value))}
                   />
@@ -201,7 +201,7 @@ export function EmployeeFormSheet({ employee }: { employee?: EmployeeFormValues 
                     name="responsibilityAllowance"
                     type="number"
                     min={0}
-                    step={1000}
+                    step="any"
                     value={responsibility}
                     onChange={(event) => setResponsibility(Number(event.target.value))}
                   />

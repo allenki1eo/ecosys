@@ -210,11 +210,37 @@ paid on a date; giving someone a raise next month must not change what last mont
 **Rates snapshot onto the run.** `payrollRuns.ratesJson` holds the NSSF, SDL, WCF and PAYE bands in
 force when the run was created, for the same reason.
 
-The arithmetic in `src/lib/payroll/calculate.ts` reproduces the company's existing spreadsheet to
-the shilling — all three employees on the July 2026 sheet reconcile across ten figures each. One
-deliberate difference from TRA guidance is documented there: the sheet assesses PAYE on basic pay
-rather than on basic less NSSF, and `payeOnBasic` keeps that behaviour as the default so the two
-agree. Set it to false to assess on taxable income instead.
+**PAYE is assessed on gross pay less the employee's NSSF contribution** — a pension contribution is
+not taxable income — and the bands are progressive, so each one taxes only the slice of income
+inside it. The rest of `src/lib/payroll/calculate.ts` reproduces the company's existing spreadsheet
+to the shilling; that sheet banded PAYE on gross, which taxes the NSSF deduction and comes out
+slightly high.
+
+Where a month's figure has to match a return filed elsewhere exactly, `payslips.paye_override` takes
+a typed figure verbatim. It is stored separately from `paye` so that editing anything else on the
+payslip re-runs the calculation without silently discarding the override, and the run page marks
+those payslips **Manual** so an overridden figure is never mistaken for a computed one.
+
+### Loans and advances
+
+Money lent to staff is recovered through the payroll. A loan carries a principal and a monthly
+instalment; **the outstanding balance is not stored** — it is the principal less the repayments
+booked against it, for the same reason per-site stock balances are not stored.
+
+A repayment counts when it is real:
+
+- **Booked directly** (cash, a transfer) — counts immediately.
+- **Recovered by a payslip** — counts once its run leaves draft. A draft run is a proposal that can
+  still be edited or deleted, so its deductions must not reduce a balance yet. That is a join to the
+  run's status rather than a flag on the repayment, so nothing can fall out of step: reopening a
+  finalised run hands the balance straight back, and deleting a draft cascades its scheduled
+  repayments away.
+
+Generating a run adds each employee's instalment to their payslip automatically, capped at what is
+still owed and allocated oldest loan first. Editing the figure down rewrites that allocation, so the
+ledger and the payslip can never disagree. Finalising re-checks that the run's deductions still fit
+— a repayment recorded in cash after the run was generated can leave it trying to over-collect — and
+refuses with the employee, the loan and both figures named rather than quietly taking too much.
 
 ## 10. Documents
 

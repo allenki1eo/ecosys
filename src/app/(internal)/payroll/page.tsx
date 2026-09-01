@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, Users, Wallet } from "lucide-react";
+import { Banknote, HandCoins, Users, Wallet } from "lucide-react";
 
 import { NewPayrollRunDialog } from "./payroll-controls";
 import { PageHeader } from "@/components/page-header";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataList } from "@/components/ui/data-list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireStaff } from "@/lib/auth/guards";
+import { loanTotals } from "@/lib/data/loans";
 import { listEmployees, listPayrollRuns } from "@/lib/data/payroll";
 import { formatPeriod } from "@/lib/payroll/calculate";
 import { scopeFor } from "@/lib/data/scope";
@@ -37,7 +38,11 @@ export default async function PayrollPage() {
     );
   }
 
-  const [runs, staff] = await Promise.all([listPayrollRuns(scope), listEmployees(scope)]);
+  const [runs, staff, loans] = await Promise.all([
+    listPayrollRuns(scope),
+    listEmployees(scope),
+    loanTotals(scope),
+  ]);
   const canManage = user.permissions.has("payroll.manage");
 
   const latestPaid = runs.find((run) => run.status !== "draft");
@@ -58,6 +63,11 @@ export default async function PayrollPage() {
                 <Users /> Employees
               </Link>
             </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/payroll/loans">
+                <HandCoins /> Loans
+              </Link>
+            </Button>
             {canManage ? <NewPayrollRunDialog /> : null}
           </div>
         }
@@ -72,14 +82,23 @@ export default async function PayrollPage() {
           icon={Banknote}
         />
         <StatCard
-          label="Last run"
-          value={latestPaid ? formatPeriod(latestPaid.period) : "—"}
-          caption={latestPaid ? STATUS[latestPaid.status].label : "Nothing run yet"}
+          label="Loans outstanding"
+          value={formatCompactCurrency(loans.outstanding)}
+          caption="Recovered from payslips automatically"
+          icon={HandCoins}
+          href="/payroll/loans"
+          tone={loans.outstanding > 0 ? "warning" : "neutral"}
         />
         <StatCard
-          label="Last employer cost"
-          value={latestPaid ? formatCompactCurrency(latestPaid.totalEmployerCost) : "—"}
-          caption="NSSF, PAYE, SDL and WCF"
+          label="Last run"
+          value={latestPaid ? formatPeriod(latestPaid.period) : "—"}
+          caption={
+            latestPaid
+              ? `${STATUS[latestPaid.status].label} · employer cost ${formatCompactCurrency(
+                  latestPaid.totalEmployerCost,
+                )}`
+              : "Nothing run yet"
+          }
         />
       </section>
 

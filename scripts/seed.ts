@@ -18,7 +18,9 @@ import { db } from "../src/lib/db";
 import {
   auditLog,
   certificates,
+  employeeLoans,
   employees,
+  loanRepayments,
   clients,
   equipment,
   equipmentMaintenance,
@@ -73,8 +75,10 @@ async function clearAll() {
   const tables = [
     auditLog,
     notifications,
+    loanRepayments,
     payslips,
     payrollRuns,
+    employeeLoans,
     employees,
     payments,
     invoiceLineItems,
@@ -935,6 +939,32 @@ async function main() {
   lastMonth.setMonth(lastMonth.getMonth() - 1);
   const period = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
 
+  // Two people carrying a balance: a loan spread over months, and an advance
+  // cleared in one. Keyed by employee number so the payslip loop can find them.
+  const loanSeed: Record<string, { kind: "loan" | "advance"; principal: number; monthly: number; reason: string }> = {
+    "1": { kind: "loan", principal: 600_000, monthly: 100_000, reason: "School fees" },
+    "3": { kind: "advance", principal: 120_000, monthly: 120_000, reason: "Salary advance" },
+  };
+
+  const loanIds: Record<string, string> = {};
+  for (const { id: employeeId, seed: person } of employeeIds) {
+    const loan = loanSeed[person.no];
+    if (!loan) continue;
+    const id = newId("loan");
+    loanIds[person.no] = id;
+    await db.insert(employeeLoans).values({
+      id,
+      reference: newReference(loan.kind === "advance" ? "ADV" : "LN"),
+      employeeId,
+      kind: loan.kind,
+      principal: loan.principal,
+      monthlyDeduction: loan.monthly,
+      startPeriod: period,
+      reason: loan.reason,
+      createdBy: staffIds["finance@ecohygiene.co.tz"],
+    });
+  }
+
   const runId = newId("run");
   let runGross = 0, runDeductions = 0, runNet = 0, runEmployer = 0;
 
@@ -950,8 +980,16 @@ async function main() {
   });
 
   for (const { id: employeeId, seed: person } of employeeIds) {
+    const loan = loanSeed[person.no];
+    const loanDeduction = loan ? Math.min(loan.monthly, loan.principal) : 0;
+
     const result = calculatePayslip(
-      { basicSalary: person.basic, untaxableAllowance: person.transport, monthlyHours: 195 },
+      {
+        basicSalary: person.basic,
+        untaxableAllowance: person.transport,
+        monthlyHours: 195,
+        loanDeduction,
+      },
       DEFAULT_RATES,
     );
     runGross += result.grossEarnings;
@@ -959,8 +997,9 @@ async function main() {
     runNet += result.totalEarning;
     runEmployer += result.employerTotalCost;
 
+    const payslipId = newId("slip");
     await db.insert(payslips).values({
-      id: newId("slip"),
+      id: payslipId,
       payrollRunId: runId,
       employeeId,
       employeeNo: person.no,
@@ -971,6 +1010,18 @@ async function main() {
       basicSalary: person.basic,
       ...result,
     });
+
+    if (loanDeduction > 0) {
+      // Booked against the loan exactly as the app does it, so the seeded
+      // balances are derived from the ledger rather than asserted.
+      await db.insert(loanRepayments).values({
+        id: newId("rep"),
+        loanId: loanIds[person.no],
+        payslipId,
+        amount: loanDeduction,
+        period,
+      });
+    }
   }
 
   await db.update(payrollRuns).set({

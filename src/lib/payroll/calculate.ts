@@ -3,17 +3,15 @@ import type { PayrollRates } from "@db/schema";
 /**
  * Tanzanian payroll arithmetic.
  *
- * These defaults reproduce the figures in Ecohygiene's existing payroll
- * spreadsheet exactly — every employee on the July 2026 sheet reconciles to the
- * shilling. They are snapshotted onto each payroll run (`payrollRuns.ratesJson`)
- * so a later change never rewrites a payslip that has already been issued.
+ * Rates are snapshotted onto each payroll run (`payrollRuns.ratesJson`) so a
+ * later change never rewrites a payslip that has already been issued.
  *
- * Note on the PAYE basis: the source spreadsheet applies the band to *basic
- * pay*, not to basic less the employee's NSSF contribution. TRA's own guidance
- * assesses PAYE on taxable income after the statutory pension deduction, which
- * would produce a slightly smaller figure. `payeOnBasic` keeps the sheet's
- * behaviour as the default so the two agree; set it to false to assess on
- * taxable income instead.
+ * **PAYE is assessed on gross pay less the employee's NSSF contribution**, which
+ * is what TRA's guidance says and what Ecohygiene does. Everything else
+ * reconciles to the shilling with the company's existing spreadsheet; that sheet
+ * banded PAYE on gross, which taxes the pension contribution and comes out
+ * slightly high. Where a payslip has to match a figure filed elsewhere exactly,
+ * `payeOverride` takes it verbatim instead of computing it.
  */
 export const DEFAULT_RATES: PayrollRates = {
   nssfEmployee: 0.1,
@@ -41,6 +39,8 @@ export type PayrollInput = {
   publicHolidayHours?: number;
   loanDeduction?: number;
   otherDeductions?: number;
+  /** A hand-entered PAYE figure. Null or undefined computes it from the bands. */
+  payeOverride?: number | null;
 };
 
 export type PayrollResult = {
@@ -52,6 +52,8 @@ export type PayrollResult = {
   grossEarnings: number;
   taxableSalary: number;
   paye: number;
+  /** Echoed back so persisting the result keeps the override with the figure. */
+  payeOverride: number | null;
   nssfEmployee: number;
   loanDeduction: number;
   otherDeductions: number;
@@ -92,13 +94,7 @@ export function calculatePaye(income: number, bands: PayrollRates["payeBands"]):
 export const OVERTIME_MULTIPLIER = 1.5;
 export const PUBLIC_HOLIDAY_MULTIPLIER = 2;
 
-export function calculatePayslip(
-  input: PayrollInput,
-  rates: PayrollRates,
-  options: { payeOnBasic?: boolean } = {},
-): PayrollResult {
-  const { payeOnBasic = true } = options;
-
+export function calculatePayslip(input: PayrollInput, rates: PayrollRates): PayrollResult {
   const basic = Math.max(0, input.basicSalary);
   const monthlyHours = input.monthlyHours && input.monthlyHours > 0 ? input.monthlyHours : 195;
   const hourlyRate = tzs(basic / monthlyHours);
@@ -117,8 +113,13 @@ export function calculatePayslip(
   const grossEarnings = basic + overtimeNormalAmount + publicHolidayAmount + responsibilityAllowance;
 
   const nssfEmployee = tzs(grossEarnings * rates.nssfEmployee);
+  // NSSF comes off before the bands are applied — a pension contribution is not
+  // taxable income.
   const taxableSalary = grossEarnings - nssfEmployee;
-  const paye = calculatePaye(payeOnBasic ? grossEarnings : taxableSalary, rates.payeBands);
+  const paye =
+    input.payeOverride == null
+      ? calculatePaye(taxableSalary, rates.payeBands)
+      : tzs(Math.max(0, input.payeOverride));
 
   const loanDeduction = tzs(input.loanDeduction ?? 0);
   const otherDeductions = tzs(input.otherDeductions ?? 0);
@@ -141,6 +142,7 @@ export function calculatePayslip(
     grossEarnings,
     taxableSalary,
     paye,
+    payeOverride: input.payeOverride ?? null,
     nssfEmployee,
     loanDeduction,
     otherDeductions,
