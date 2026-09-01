@@ -1,3 +1,4 @@
+import { MigratePanel } from "./migrate-panel";
 import { PermissionMatrix } from "./permission-matrix";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,8 @@ export default async function SettingsPage() {
 
   const canViewAudit = user.permissions.has("audit.view");
   const canManagePermissions = user.permissions.has("permissions.manage");
+  // Schema changes are irreversible in a way permissions are not.
+  const isSuperAdmin = user.role === "super_admin";
 
   const [overrides, auditEntries] = await Promise.all([
     listRolePermissions(scope),
@@ -50,6 +53,7 @@ export default async function SettingsPage() {
         <TabsList>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          {isSuperAdmin ? <TabsTrigger value="database">Database</TabsTrigger> : null}
           {canViewAudit ? <TabsTrigger value="audit">Audit log</TabsTrigger> : null}
         </TabsList>
 
@@ -69,6 +73,12 @@ export default async function SettingsPage() {
             readOnly={!canManagePermissions}
           />
         </TabsContent>
+
+        {isSuperAdmin ? (
+          <TabsContent value="database">
+            <MigratePanel />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="notifications">
           <Card>

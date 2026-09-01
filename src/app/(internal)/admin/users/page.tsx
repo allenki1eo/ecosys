@@ -1,6 +1,6 @@
 import { Users } from "lucide-react";
 
-import { InviteUserSheet, UserRowControls } from "./user-controls";
+import { EditUserSheet, InviteUserSheet, UserRowControls } from "./user-controls";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -120,12 +120,22 @@ function UserTable({
                     {row.lastLoginAt ? formatRelative(row.lastLoginAt) : `Invited ${formatDate(row.createdAt)}`}
                   </TableCell>
                   <TableCell className="text-right">
-                    <UserRowControls
-                      userId={row.id}
-                      role={row.role}
-                      isActive={row.isActive}
-                      isSelf={row.id === currentUserId}
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      <EditUserSheet
+                        user={{
+                          id: row.id,
+                          name: row.name,
+                          email: row.email,
+                          phone: row.phone,
+                        }}
+                      />
+                      <UserRowControls
+                        userId={row.id}
+                        role={row.role}
+                        isActive={row.isActive}
+                        isSelf={row.id === currentUserId}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

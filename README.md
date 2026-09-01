@@ -81,6 +81,7 @@ locked out.
 | `npm run lint` | ESLint (next/core-web-vitals) |
 | `npm run db:generate` | Generate a SQL migration from the schema |
 | `npm run db:push` | Apply the schema directly (dev) |
+| `npm run db:migrate` | Apply pending migrations (use this on a deployed database) |
 | `npm run db:studio` | Drizzle Studio |
 | `npm run db:seed` | Reset and reseed demo data |
 | `npm run db:create-admin` | Create or promote a Super Admin (see above) |
@@ -103,8 +104,18 @@ are present.
    then every request 500s. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` (plus `CRON_SECRET`)
    in Project → Settings → Environment Variables, then redeploy. If you miss this, the logs say
    so in as many words rather than showing a libSQL stack trace.
-2. **Create the schema on the Turso database** — `npm run db:push` locally with the production
-   envs exported, or apply `drizzle/migrations/` with `turso db shell`.
+2. **Create the schema on the Turso database.** Either press **Apply pending migrations** under
+   Settings → Database while signed in as a Super Admin, or run it yourself:
+
+   ```bash
+   export TURSO_DATABASE_URL="libsql://…" TURSO_AUTH_TOKEN="…"
+   npm run db:migrate
+   ```
+
+   **Do this after every deploy that adds a feature.** A deployment whose schema is behind its code
+   returns *Something went wrong* on each page that reads the new tables, and nothing else in the
+   app hints at why. Both routes are idempotent and record what they have applied, so running them
+   twice does nothing the second time.
 3. **Seed only if you want the demo data.** `npm run db:seed` clears the tables it owns first, so
    never point it at a database holding real records.
 

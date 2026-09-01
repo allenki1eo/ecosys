@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { clients, rolePermissions, users, type UserRole } from "@db/schema";
@@ -62,6 +62,34 @@ export async function inviteUser(scope: Scope, input: InviteUserInput) {
   });
   await recordAudit(scope, "user.invite", "user", id, { role: input.role, email: input.email });
   return id;
+}
+
+export type UserProfileInput = {
+  name: string;
+  email: string;
+  phone?: string | null;
+};
+
+/**
+ * A user's own details. Role, tenant and password are changed through their own
+ * paths — each carries a different consequence and a different permission.
+ */
+export async function updateUserProfile(scope: Scope, userId: string, input: UserProfileInput) {
+  if (!hasPermission(scope, "users.manage")) throw new Error("Missing permission: users.manage");
+
+  const email = input.email.toLowerCase();
+  const [clash] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.email, email), sql`"users"."id" != ${userId}`))
+    .limit(1);
+  if (clash) throw new Error(`${email} is already signed up to another account.`);
+
+  await db
+    .update(users)
+    .set({ name: input.name, email, phone: input.phone ?? null })
+    .where(eq(users.id, userId));
+  await recordAudit(scope, "user.update", "user", userId, { email });
 }
 
 export async function setUserActive(scope: Scope, userId: string, isActive: boolean) {

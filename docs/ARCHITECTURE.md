@@ -263,7 +263,51 @@ build rather than leaking database code into the browser bundle. Two consequence
   filters navigation by permission and passes the **hrefs**; `AppSidebar` imports the nav
   definition itself and resolves the icons client-side.
 
-## 12. Testing the isolation yourself
+## 12. Creating and editing records
+
+Every module owns its records end to end: each entity that can be listed can also be created and
+edited from the page that lists it, behind the same permission that governs reading it.
+
+| Module | Create | Edit |
+|---|---|---|
+| Clients | New client, add site | Edit client, edit site |
+| Jobs | New job | Reschedule, reassign, checklist, sign-off |
+| Inventory | Add item, add supplier, register equipment, raise a purchase order | Edit item, supplier, equipment; log a service |
+| Compliance | Issue a certificate | — (a certificate is a statement of a date) |
+| Incidents | Report | Status |
+| Finance | Generate an invoice | Status, record a payment |
+| Payroll | Employee, run, loan, advance | Employee, payslip, loan; record a repayment |
+| Admin | Invite a user, add a service type | Edit a user, edit a service type, permissions |
+
+Two rules shape what an edit form is allowed to touch:
+
+- **Quantity is never edited.** Stock changes through `recordMovement` and nothing else, so the item
+  form has no quantity field. Opening stock on a new item is booked in as a movement rather than
+  written to the column — set directly, it would be invisible to the per-location balances and the
+  item's total would stop reconciling with its ledger.
+- **A loan's principal is fixed** once recorded: repayments are measured against it. Write it off
+  and record a new one if the figure was wrong.
+
+Deletion is rarer than editing and deliberately so. A supplier can be deleted only while no item
+points at it; a loan only while nothing has been repaid; a payroll run only while it is a draft. An
+inventory item is retired rather than deleted, because the movements referencing it are ledger rows
+that must keep resolving.
+
+## 13. Keeping the deployed schema in step
+
+A deploy carrying new tables fails on every page that reads them until the migrations have run, and
+the failure surfaces as an opaque *Something went wrong*. Two routes apply them, both idempotent:
+
+- `npm run db:migrate` with the production credentials exported.
+- **Settings → Database → Apply pending migrations**, for a Super Admin with no terminal to hand.
+  The same work is available at `POST /api/admin/migrate` with `CRON_SECRET` as a bearer token —
+  which is the path that still works when the missing table is the one holding sessions.
+
+Applied files are recorded in `__ecohygiene_migrations`. A statement that fails because its table or
+column already exists is treated as done rather than fatal, so a database part-built with
+`db:push` can still be brought forward.
+
+## 14. Testing the isolation yourself
 
 ```bash
 npm run db:seed && npm run build && npm start
