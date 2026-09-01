@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { PayslipDocument } from "@/lib/pdf/payslip";
 import { pdfResponse, slugForFile } from "@/lib/pdf/render";
 import { getCurrentUser } from "@/lib/auth/session";
+import { payslipLoanLines } from "@/lib/data/loans";
 import { getPayslip } from "@/lib/data/payroll";
 import { formatPeriod } from "@/lib/payroll/calculate";
 import { scopeFor } from "@/lib/data/scope";
@@ -25,8 +26,12 @@ export async function GET(_request: Request, { params }: { params: { payslipId: 
   if (!payslip) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { run, ...slip } = payslip;
+  // What the loan deduction covers, so the employee can see their balance come
+  // down on the payslip itself rather than having to ask.
+  const loans = await payslipLoanLines(slip.id);
+
   return pdfResponse(
-    PayslipDocument({ payslip: slip, run }),
+    PayslipDocument({ payslip: slip, run, loans }),
     `payslip-${slugForFile(slip.employeeName)}-${slugForFile(formatPeriod(run.period))}.pdf`,
   );
 }

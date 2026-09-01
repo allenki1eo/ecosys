@@ -91,7 +91,13 @@ export function DataList<T>({
       <ul className={cn("space-y-2 md:hidden", className)}>
         {rows.map((row) => {
           const card = (
-            <div className="rounded-lg border bg-card p-3.5">
+            <div
+              className={cn(
+                "rounded-lg border bg-card p-3.5",
+                href &&
+                  "peer-active:bg-accent/40 peer-focus-visible:ring-1 peer-focus-visible:ring-ring",
+              )}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{primary.cell(row)}</div>
@@ -123,17 +129,22 @@ export function DataList<T>({
           );
 
           return (
-            <li key={rowKey(row)}>
+            // The row link covers the card rather than wrapping it. Cells often
+            // link to the same record for the desktop table's benefit, and an
+            // <a> inside an <a> is invalid HTML: the browser hoists the inner
+            // one out, the DOM stops matching the server, and hydration fails.
+            // As a sibling it cannot nest, and being positioned it still paints
+            // over the whole card, so the tap target is unchanged.
+            <li key={rowKey(row)} className={href ? "relative" : undefined}>
               {href ? (
                 <Link
                   href={href(row)}
-                  className="block rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:bg-accent/40"
+                  className="peer absolute inset-0 z-10 rounded-lg focus-visible:outline-none"
                 >
-                  {card}
+                  <span className="sr-only">Open</span>
                 </Link>
-              ) : (
-                card
-              )}
+              ) : null}
+              {card}
             </li>
           );
         })}

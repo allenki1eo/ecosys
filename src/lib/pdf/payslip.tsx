@@ -2,14 +2,29 @@ import { Document, Page, Text, View } from "@react-pdf/renderer";
 
 import { BRAND, COMPANY, money, pdfDate, styles } from "./theme";
 import { formatPeriod } from "@/lib/payroll/calculate";
-import type { Payslip, PayrollRun } from "@db/schema";
+import type { LoanKind, Payslip, PayrollRun } from "@db/schema";
+
+export type PayslipLoanLine = {
+  reference: string;
+  kind: LoanKind;
+  amount: number;
+  balanceAfter: number;
+};
 
 /**
  * Payslip, laid out to match the sheet Ecohygiene already issues: identity
  * block, then earnings and deductions side by side, then what is actually
  * payable.
  */
-export function PayslipDocument({ payslip, run }: { payslip: Payslip; run: PayrollRun }) {
+export function PayslipDocument({
+  payslip,
+  run,
+  loans = [],
+}: {
+  payslip: Payslip;
+  run: PayrollRun;
+  loans?: PayslipLoanLine[];
+}) {
   const earnings: [string, string][] = [
     ["Basic pay", money(payslip.basicSalary)],
     ["Responsibility allowance", money(payslip.responsibilityAllowance)],
@@ -20,7 +35,7 @@ export function PayslipDocument({ payslip, run }: { payslip: Payslip; run: Payro
   const deductions: [string, string][] = [
     ["PAYE", money(payslip.paye)],
     ["NSSF (employee)", money(payslip.nssfEmployee)],
-    ["Loan repayment", money(payslip.loanDeduction)],
+    ["Loan / advance repayment", money(payslip.loanDeduction)],
     ["Other deductions", money(payslip.otherDeductions)],
   ];
 
@@ -145,6 +160,29 @@ export function PayslipDocument({ payslip, run }: { payslip: Payslip; run: Payro
             </Text>
           </View>
         </View>
+
+        {/* What the loan deduction covers, and what is left after it */}
+        {loans.length > 0 ? (
+          <View style={{ marginTop: 16 }}>
+            <Text style={styles.sectionTitle}>LOANS AND ADVANCES</Text>
+            <View style={styles.tableHead}>
+              <Text style={[styles.th, { flex: 1 }]}>REFERENCE</Text>
+              <Text style={[styles.th, styles.right, { width: 90 }]}>DEDUCTED</Text>
+              <Text style={[styles.th, styles.right, { width: 90 }]}>BALANCE LEFT</Text>
+            </View>
+            {loans.map((loan) => (
+              <View key={loan.reference} style={styles.tableRow}>
+                <Text style={[styles.td, { flex: 1 }]}>
+                  {loan.kind === "advance" ? "Salary advance" : "Loan"} {loan.reference}
+                </Text>
+                <Text style={[styles.td, styles.right, { width: 90 }]}>{money(loan.amount)}</Text>
+                <Text style={[styles.td, styles.right, { width: 90 }]}>
+                  {money(loan.balanceAfter)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {/* Employer-borne statutory cost — informational, not deducted */}
         <View style={{ marginTop: 16 }}>

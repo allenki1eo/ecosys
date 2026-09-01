@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, FileText } from "lucide-react";
 
+import { PayslipEditSheet } from "./payslip-editor";
 import { RunStatusControls, SendPayslipButton } from "../payroll-controls";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -140,13 +141,30 @@ export default async function PayrollRunPage({ params }: { params: { runId: stri
             key: "paye",
             header: "PAYE",
             className: "font-data text-muted-foreground",
-            cell: (payslip) => formatCurrency(payslip.paye),
+            cell: (payslip) => (
+              <span className="inline-flex items-center gap-1.5">
+                {formatCurrency(payslip.paye)}
+                {payslip.payeOverride != null ? (
+                  <Badge variant="warning" title="Entered by hand rather than computed">
+                    Manual
+                  </Badge>
+                ) : null}
+              </span>
+            ),
           },
           {
             key: "nssf",
             header: "NSSF",
             className: "font-data text-muted-foreground",
             cell: (payslip) => formatCurrency(payslip.nssfEmployee),
+          },
+          {
+            key: "loan",
+            header: "Loan",
+            className: "font-data text-muted-foreground",
+            desktopOnly: true,
+            cell: (payslip) =>
+              payslip.loanDeduction > 0 ? formatCurrency(payslip.loanDeduction) : "—",
           },
           {
             key: "net",
@@ -161,6 +179,33 @@ export default async function PayrollRunPage({ params }: { params: { runId: stri
             className: "text-right",
             cell: (payslip) => (
               <div className="flex items-center justify-end gap-2">
+                {canManage && run.status === "draft" ? (
+                  <PayslipEditSheet
+                    rates={rates}
+                    loanNote={
+                      payslip.loanReferences
+                        ? `Recovering ${payslip.loanReferences}. Lowering this leaves the rest outstanding.`
+                        : undefined
+                    }
+                    payslip={{
+                      id: payslip.id,
+                      employeeName: payslip.employeeName,
+                      basicSalary: payslip.basicSalary,
+                      monthlyHours: payslip.monthlyHours,
+                      daysWorked: payslip.daysWorked,
+                      earnedLeaveDays: payslip.earnedLeaveDays,
+                      sickLeaveDays: payslip.sickLeaveDays,
+                      overtimeNormalHours: payslip.overtimeNormalHours,
+                      publicHolidayHours: payslip.publicHolidayHours,
+                      responsibilityAllowance: payslip.responsibilityAllowance,
+                      untaxableAllowance: payslip.untaxableAllowance,
+                      loanDeduction: payslip.loanDeduction,
+                      otherDeductions: payslip.otherDeductions,
+                      payeOverride: payslip.payeOverride,
+                      notes: payslip.notes,
+                    }}
+                  />
+                ) : null}
                 <Button asChild size="sm" variant="ghost">
                   <a
                     href={`/api/documents/payslip/${payslip.id}`}

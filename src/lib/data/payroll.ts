@@ -13,6 +13,7 @@ import {
 } from "@db/schema";
 import { newId, newReference } from "@/lib/ids";
 import { recordAudit } from "@/lib/data/audit";
+import { allocateRepayments, assertRunRepaymentsFit, loansDueFor } from "@/lib/data/loans";
 import { hasPermission, type Scope } from "@/lib/data/scope";
 import { calculatePayslip, DEFAULT_RATES, formatPeriod } from "@/lib/payroll/calculate";
 
@@ -106,12 +107,32 @@ export async function getPayrollRun(scope: Scope, runId: string) {
   if (!run) return undefined;
 
   const lines = await db
-    .select()
+    .select({
+      payslip: payslips,
+      // Needed to preview the recalculation while editing — hours live on the
+      // employee, not on the payslip snapshot.
+      monthlyHours: employees.monthlyHours,
+      /** What this payslip's loan deduction is recovering, as a label. */
+      loanReferences: sql<string | null>`(
+        select group_concat("l"."reference", ', ')
+        from "loan_repayments" "r"
+        join "employee_loans" "l" on "l"."id" = "r"."loan_id"
+        where "r"."payslip_id" = "payslips"."id"
+      )`,
+    })
     .from(payslips)
+    .innerJoin(employees, eq(payslips.employeeId, employees.id))
     .where(eq(payslips.payrollRunId, runId))
     .orderBy(asc(payslips.employeeNo));
 
-  return { ...run, payslips: lines };
+  return {
+    ...run,
+    payslips: lines.map((line) => ({
+      ...line.payslip,
+      monthlyHours: line.monthlyHours,
+      loanReferences: line.loanReferences,
+    })),
+  };
 }
 
 export async function getPayslip(scope: Scope, payslipId: string) {
@@ -168,18 +189,25 @@ export async function createPayrollRun(
   });
 
   for (const employee of staff) {
+    // Loans and advances are recovered automatically: whatever is due this
+    // month, capped at what is still owed. Payroll can edit it down afterwards.
+    const due = await loansDueFor(employee.id, input.period);
+    const loanDeduction = due.reduce((sum, loan) => sum + loan.due, 0);
+
     const result = calculatePayslip(
       {
         basicSalary: employee.basicSalary,
         untaxableAllowance: employee.untaxableAllowance,
         responsibilityAllowance: employee.responsibilityAllowance,
         monthlyHours: employee.monthlyHours,
+        loanDeduction,
       },
       rates,
     );
 
+    const payslipId = newId("slip");
     await db.insert(payslips).values({
-      id: newId("slip"),
+      id: payslipId,
       payrollRunId: runId,
       employeeId: employee.id,
       employeeNo: employee.employeeNo,
@@ -193,6 +221,8 @@ export async function createPayrollRun(
       basicSalary: employee.basicSalary,
       ...result,
     });
+
+    await allocateRepayments(payslipId, employee.id, input.period, loanDeduction);
   }
 
   await recalculateRunTotals(runId);
@@ -213,6 +243,8 @@ export type PayslipAdjustment = {
   untaxableAllowance?: number;
   loanDeduction?: number;
   otherDeductions?: number;
+  /** `null` clears a previous override and returns PAYE to the bands. */
+  payeOverride?: number | null;
   notes?: string | null;
 };
 
@@ -236,6 +268,8 @@ export async function adjustPayslip(
     .where(eq(employees.id, existing.employeeId))
     .limit(1);
 
+  const loanDeduction = adjustment.loanDeduction ?? existing.loanDeduction;
+
   const result = calculatePayslip(
     {
       basicSalary: existing.basicSalary,
@@ -245,11 +279,17 @@ export async function adjustPayslip(
       responsibilityAllowance:
         adjustment.responsibilityAllowance ?? existing.responsibilityAllowance,
       untaxableAllowance: adjustment.untaxableAllowance ?? existing.untaxableAllowance,
-      loanDeduction: adjustment.loanDeduction ?? existing.loanDeduction,
+      loanDeduction,
       otherDeductions: adjustment.otherDeductions ?? existing.otherDeductions,
+      // `undefined` leaves the override alone; `null` clears it deliberately.
+      payeOverride:
+        adjustment.payeOverride === undefined ? existing.payeOverride : adjustment.payeOverride,
     },
     existing.run.ratesJson,
   );
+
+  // Keep the loan ledger in step with the figure on the payslip.
+  await allocateRepayments(payslipId, existing.employeeId, existing.run.period, loanDeduction);
 
   await db
     .update(payslips)
@@ -299,6 +339,10 @@ export async function setPayrollRunStatus(
   status: PayrollRunStatus,
 ) {
   assertCanManage(scope);
+  // Finalising is what turns this run's deductions into repayments, so check
+  // they still fit before they count.
+  if (status === "finalised") await assertRunRepaymentsFit(runId);
+
   await db
     .update(payrollRuns)
     .set({
@@ -317,6 +361,9 @@ export async function deletePayrollRun(scope: Scope, runId: string) {
   if (run.status !== "draft") {
     throw new Error("Only draft runs can be deleted.");
   }
+
+  // Cascades to the payslips and, through them, to the loan repayments they had
+  // scheduled — so deleting a draft leaves no balance quietly reduced.
   await db.delete(payrollRuns).where(eq(payrollRuns.id, runId));
   await recordAudit(scope, "payroll_run.delete", "payroll_run", runId, { period: run.period });
 }

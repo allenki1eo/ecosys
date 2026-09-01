@@ -135,7 +135,16 @@ reminder already in the outbox is never queued twice — so retries and manual t
 **Payroll** (`/payroll`) — employees with salary details, monthly runs that generate a payslip
 per active employee, PAYE / NSSF / SDL / WCF computed to Tanzanian rates, payslip PDFs, and
 sending payslips to staff by email or SMS. Statutory rates are snapshotted onto each run, so
-changing them never rewrites a payslip already issued.
+changing them never rewrites a payslip already issued. PAYE is assessed on gross pay less NSSF;
+any payslip can carry a hand-entered PAYE figure instead, and is marked **Manual** where it does.
+Each payslip on a draft run is editable — days worked, overtime, allowances and deductions —
+with the recalculation previewed before you save it.
+
+**Loans and advances** (`/payroll/loans`) — money lent to staff, recovered from their pay
+automatically until the balance clears. Balances are derived from a repayment ledger rather than
+stored, and a deduction only counts once its payroll run is finalised, so reopening a run gives the
+balance back. Repayments made in cash can be recorded directly, and each payslip PDF shows what was
+deducted and what is left.
 
 **Documents** — invoices, compliance certificates and payslips all render as PDFs on demand at
 `/api/documents/{invoice,certificate,payslip}/<id>`. Nothing is written to object storage, so
