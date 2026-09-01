@@ -252,20 +252,37 @@ export async function advanceJobStatus(
   if (next === "completed") {
     for (const line of input.consumption ?? []) {
       if (!line.quantity) continue;
+      const quantity = Math.abs(line.quantity);
+
+      /*
+       * Deduct from wherever the stock actually sits, not from wherever the job
+       * happened. Some clients keep our chemicals in their own store (so the
+       * crew draws down that site's balance); elsewhere the crew carries drums
+       * from the warehouse and the job site never holds stock at all. Charging
+       * every job to its site would drive those sites permanently negative.
+       */
+      const [held] = await db
+        .select({ quantity: sql<number>`coalesce(sum("inventory_movements"."quantity_delta"), 0)` })
+        .from(inventoryMovements)
+        .where(
+          and(eq(inventoryMovements.itemId, line.itemId), eq(inventoryMovements.siteId, job.siteId)),
+        );
+
+      const onSite = Number(held?.quantity ?? 0);
+      const drawFrom = onSite >= quantity ? job.siteId : null;
+
       await db.insert(inventoryMovements).values({
         id: newId("mov"),
         itemId: line.itemId,
         jobId,
-        siteId: job.siteId,
-        quantityDelta: -Math.abs(line.quantity),
+        siteId: drawFrom,
+        quantityDelta: -quantity,
         reason: "job_usage",
         performedBy: scope.userId === "system" ? null : scope.userId,
       });
       await db
         .update(inventoryItems)
-        .set({
-          quantityOnHand: sql`${inventoryItems.quantityOnHand} - ${Math.abs(line.quantity)}`,
-        })
+        .set({ quantityOnHand: sql`${inventoryItems.quantityOnHand} - ${quantity}` })
         .where(eq(inventoryItems.id, line.itemId));
     }
 

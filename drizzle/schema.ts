@@ -414,6 +414,9 @@ export const inventoryMovements = sqliteTable(
   (t) => ({
     itemIdx: index("inventory_movements_item_idx").on(t.itemId),
     jobIdx: index("inventory_movements_job_idx").on(t.jobId),
+    // Per-location balances group by (item, site); this serves both that and
+    // the "what does this site hold" view.
+    siteItemIdx: index("inventory_movements_site_item_idx").on(t.siteId, t.itemId),
   }),
 );
 

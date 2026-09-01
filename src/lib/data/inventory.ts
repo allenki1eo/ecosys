@@ -4,6 +4,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
+  clients,
   equipment,
   equipmentMaintenance,
   inventoryItems,
@@ -105,19 +106,77 @@ export type MovementInput = {
   itemId: string;
   quantityDelta: number;
   reason: "purchase" | "job_usage" | "transfer" | "adjustment" | "wastage" | "return";
+  /** The location this movement affects. NULL means the central warehouse. */
   siteId?: string | null;
   jobId?: string | null;
   notes?: string | null;
 };
 
 /**
- * The only supported way to change stock: writes the ledger row and the
- * materialised running total together so the two can always be reconciled.
+ * The only supported way to change stock.
+ *
+ * `site_id` on a movement identifies *where* the stock moved, with NULL meaning
+ * the central warehouse, so the balance held anywhere is the sum of that
+ * location's deltas. `inventoryItems.quantityOnHand` is the company-wide total
+ * across every location.
+ *
+ * A transfer is the one reason that writes two rows — out of the source and
+ * into the destination — because moving a drum from the warehouse to a client's
+ * mixing unit changes where the stock is without changing how much the company
+ * holds. Writing one row would have made the totals drift every time stock was
+ * deployed.
  */
 export async function recordMovement(scope: Scope, input: MovementInput) {
   assertInternal(scope);
   if (!hasPermission(scope, "inventory.adjust")) {
     throw new Error("Missing permission: inventory.adjust");
+  }
+
+  const performedBy = scope.userId === "system" ? null : scope.userId;
+
+  if (input.reason === "transfer") {
+    const quantity = Math.abs(input.quantityDelta);
+    if (quantity === 0) throw new Error("Enter a quantity to transfer");
+
+    // A positive delta moves stock out to the site; a negative one brings it
+    // back to the warehouse.
+    const toSite = input.quantityDelta > 0;
+    const source = toSite ? null : (input.siteId ?? null);
+    const destination = toSite ? (input.siteId ?? null) : null;
+
+    if (source === destination) {
+      throw new Error("Choose a destination different from the source location");
+    }
+
+    const outId = newId("mov");
+    await db.insert(inventoryMovements).values([
+      {
+        id: outId,
+        itemId: input.itemId,
+        siteId: source,
+        quantityDelta: -quantity,
+        reason: "transfer",
+        notes: input.notes ?? null,
+        performedBy,
+      },
+      {
+        id: newId("mov"),
+        itemId: input.itemId,
+        siteId: destination,
+        quantityDelta: quantity,
+        reason: "transfer",
+        notes: input.notes ?? null,
+        performedBy,
+      },
+    ]);
+
+    // The company still holds the same quantity, so the total is untouched.
+    await recordAudit(scope, "inventory.transfer", "inventory_item", input.itemId, {
+      quantity,
+      from: source ?? "warehouse",
+      to: destination ?? "warehouse",
+    });
+    return outId;
   }
 
   const id = newId("mov");
@@ -129,7 +188,7 @@ export async function recordMovement(scope: Scope, input: MovementInput) {
     quantityDelta: input.quantityDelta,
     reason: input.reason,
     notes: input.notes ?? null,
-    performedBy: scope.userId === "system" ? null : scope.userId,
+    performedBy,
   });
 
   await db
@@ -142,6 +201,166 @@ export async function recordMovement(scope: Scope, input: MovementInput) {
     reason: input.reason,
   });
   return id;
+}
+
+/* --------------------------- where stock is held -------------------------- */
+
+export type StockLocation = {
+  /** NULL for the central warehouse. */
+  siteId: string | null;
+  siteName: string;
+  clientId: string | null;
+  clientName: string | null;
+  quantity: number;
+};
+
+/**
+ * Balances per location, derived from the ledger rather than stored: a
+ * second running total per site would be one more number to drift.
+ *
+ * Locations that have netted back to zero are dropped — a site that once held
+ * a drum and used it all is not "holding 0 litres", it is simply not a place
+ * this item is kept any more.
+ */
+export async function itemStockByLocation(scope: Scope, itemId: string): Promise<StockLocation[]> {
+  assertInternal(scope);
+
+  const rows = await db
+    .select({
+      siteId: inventoryMovements.siteId,
+      siteName: sites.name,
+      clientId: sites.clientId,
+      clientName: clients.name,
+      quantity: sql<number>`sum("inventory_movements"."quantity_delta")`,
+    })
+    .from(inventoryMovements)
+    .leftJoin(sites, eq(inventoryMovements.siteId, sites.id))
+    .leftJoin(clients, eq(sites.clientId, clients.id))
+    .where(eq(inventoryMovements.itemId, itemId))
+    .groupBy(inventoryMovements.siteId);
+
+  return rows
+    .map((row) => ({
+      siteId: row.siteId,
+      siteName: row.siteId ? (row.siteName ?? "Unknown site") : "Shinyanga Warehouse",
+      clientId: row.clientId,
+      clientName: row.siteId ? row.clientName : null,
+      quantity: Number(row.quantity ?? 0),
+    }))
+    .filter((row) => Math.abs(row.quantity) > 0.0001)
+    .sort((a, b) => b.quantity - a.quantity);
+}
+
+/** How many distinct locations hold each item, for the stock list. */
+export async function locationCounts(scope: Scope): Promise<Record<string, number>> {
+  assertInternal(scope);
+
+  const rows = await db
+    .select({
+      itemId: inventoryMovements.itemId,
+      siteId: inventoryMovements.siteId,
+      quantity: sql<number>`sum("inventory_movements"."quantity_delta")`,
+    })
+    .from(inventoryMovements)
+    .groupBy(inventoryMovements.itemId, inventoryMovements.siteId);
+
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (Math.abs(Number(row.quantity ?? 0)) <= 0.0001) continue;
+    counts[row.itemId] = (counts[row.itemId] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export type LocationStock = {
+  siteId: string | null;
+  siteName: string;
+  clientName: string | null;
+  itemCount: number;
+  totalValue: number;
+};
+
+/**
+ * Every location and what it currently holds — the "which companies hold our
+ * chemicals" view. Value is included only where the caller may see costs.
+ */
+export async function stockByLocation(scope: Scope): Promise<LocationStock[]> {
+  assertInternal(scope);
+
+  const rows = await db
+    .select({
+      siteId: inventoryMovements.siteId,
+      siteName: sites.name,
+      clientName: clients.name,
+      itemId: inventoryMovements.itemId,
+      costPerUnit: inventoryItems.costPerUnit,
+      quantity: sql<number>`sum("inventory_movements"."quantity_delta")`,
+    })
+    .from(inventoryMovements)
+    .innerJoin(inventoryItems, eq(inventoryMovements.itemId, inventoryItems.id))
+    .leftJoin(sites, eq(inventoryMovements.siteId, sites.id))
+    .leftJoin(clients, eq(sites.clientId, clients.id))
+    .groupBy(inventoryMovements.siteId, inventoryMovements.itemId);
+
+  const byLocation = new Map<string, LocationStock>();
+  for (const row of rows) {
+    const quantity = Number(row.quantity ?? 0);
+    if (Math.abs(quantity) <= 0.0001) continue;
+
+    const key = row.siteId ?? "__warehouse__";
+    const existing = byLocation.get(key) ?? {
+      siteId: row.siteId,
+      siteName: row.siteId ? (row.siteName ?? "Unknown site") : "Shinyanga Warehouse",
+      clientName: row.siteId ? row.clientName : null,
+      itemCount: 0,
+      totalValue: 0,
+    };
+    existing.itemCount += 1;
+    existing.totalValue += quantity * row.costPerUnit;
+    byLocation.set(key, existing);
+  }
+
+  return [...byLocation.values()].sort((a, b) => {
+    // Warehouse first, then the busiest sites.
+    if (a.siteId === null) return -1;
+    if (b.siteId === null) return 1;
+    return b.itemCount - a.itemCount;
+  });
+}
+
+/** One item, with where it is held and how it got there. */
+export async function getInventoryItem(scope: Scope, itemId: string) {
+  assertInternal(scope);
+
+  const [item] = await db
+    .select({
+      id: inventoryItems.id,
+      sku: inventoryItems.sku,
+      name: inventoryItems.name,
+      category: inventoryItems.category,
+      unit: inventoryItems.unit,
+      quantityOnHand: inventoryItems.quantityOnHand,
+      reorderThreshold: inventoryItems.reorderThreshold,
+      costPerUnit: inventoryItems.costPerUnit,
+      location: inventoryItems.location,
+      isActive: inventoryItems.isActive,
+      supplierId: inventoryItems.supplierId,
+      supplierName: suppliers.name,
+      leadTimeDays: suppliers.leadTimeDays,
+    })
+    .from(inventoryItems)
+    .leftJoin(suppliers, eq(inventoryItems.supplierId, suppliers.id))
+    .where(eq(inventoryItems.id, itemId))
+    .limit(1);
+
+  if (!item) return undefined;
+
+  const [locations, movements] = await Promise.all([
+    itemStockByLocation(scope, itemId),
+    listMovements(scope, itemId, 60),
+  ]);
+
+  return { ...item, locations, movements };
 }
 
 export async function createInventoryItem(

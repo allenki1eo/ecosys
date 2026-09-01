@@ -15,6 +15,13 @@
       "when": 1787688492695,
       "tag": "0001_curious_magdalene",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788205859587,
+      "tag": "0002_high_doorman",
+      "breakpoints": true
     }
   ]
 }

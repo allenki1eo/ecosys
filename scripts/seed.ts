@@ -12,7 +12,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config();
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "../src/lib/db";
 import {
@@ -143,6 +143,21 @@ async function main() {
       contractStart: new Date(Date.now() - 420 * DAY),
       contractEnd: daysFromNow(210),
       sites: [{ name: "Sayona Factory — Shinyanga", region: "Shinyanga", lat: -3.6702, lng: 33.4256 }],
+    },
+    {
+      id: newId("cli"),
+      name: "East African Spirit Company",
+      slug: "east-african-spirit",
+      industry: "Distilling & beverages",
+      billingContact: "Editha Mwakalinga",
+      billingEmail: "accounts@eastafricanspirit.example",
+      billingPhone: "+255754000404",
+      specNotes:
+        "CIP chemicals stored on site in the chemical store. Stock counted at each visit against the chemical stock position sheet.",
+      paymentTermsDays: 30,
+      contractStart: new Date(Date.now() - 240 * DAY),
+      contractEnd: daysFromNow(120),
+      sites: [{ name: "EAS Distillery — Dar es Salaam", region: "Dar es Salaam", lat: -6.7924, lng: 39.2083 }],
     },
     {
       id: newId("cli"),
@@ -422,6 +437,23 @@ async function main() {
       costPerUnit: item.cost,
       supplierId: supplierSeeds[index % supplierSeeds.length].id,
     });
+
+    // Opening stock is booked into the warehouse as a movement, not just set on
+    // the item: per-location balances are summed from the ledger, so quantity
+    // that never entered the ledger would be quantity held nowhere.
+    await db.insert(inventoryMovements).values({
+      id: newId("mov"),
+      itemId: id,
+      siteId: null,
+      // Six months of job history draws these down, so the opening balance is
+      // sized to cover it; the closing total is recomputed from the ledger once
+      // every movement has been written.
+      quantityDelta: item.qty * 12,
+      reason: "purchase",
+      notes: "Opening stock",
+      performedBy: staffIds["stores@ecohygiene.co.tz"],
+      createdAt: new Date(Date.now() - 200 * DAY),
+    });
   }
 
   // One pending reorder awaiting approval, so the workflow is visible.
@@ -443,6 +475,129 @@ async function main() {
     quantity: 60,
     unitCost: 22_000,
   });
+
+  /* ------------------- CIP chemicals held at client sites ----------------- */
+
+  // Taken from the East African Spirit chemical stock position sheet. These are
+  // Ecohygiene's chemicals kept in the client's own chemical store, which is
+  // why they show up under that site rather than the warehouse.
+  const easStock: { sku: string; name: string; unit: string; qty: number; cost: number }[] = [
+    { sku: "AD1", name: "AD1", unit: "L", qty: 415, cost: 12000 },
+    { sku: "AD2", name: "AD2", unit: "L", qty: 100, cost: 12500 },
+    { sku: "AD2MXD1", name: "AD2MXD1", unit: "L", qty: 2, cost: 13000 },
+    { sku: "AD5", name: "AD5", unit: "L", qty: 525, cost: 11500 },
+    { sku: "AD5MXD1", name: "AD5MXD1", unit: "L", qty: 60, cost: 13000 },
+    { sku: "AD10", name: "AD10", unit: "L", qty: 15, cost: 14000 },
+    { sku: "AD15", name: "AD15", unit: "L", qty: 20, cost: 14500 },
+    { sku: "AD16", name: "AD16", unit: "L", qty: 80, cost: 14000 },
+    { sku: "AD21", name: "AD21", unit: "L", qty: 80, cost: 15000 },
+    { sku: "AD21MXD1", name: "AD21MXD1", unit: "L", qty: 120, cost: 15500 },
+    { sku: "AD21MXD3", name: "AD21MXD3 (pc77)", unit: "L", qty: 57, cost: 16000 },
+    { sku: "AD23", name: "AD23", unit: "L", qty: 70, cost: 15000 },
+    { sku: "AD23MXD1", name: "AD23MXD1", unit: "L", qty: 160, cost: 15500 },
+    { sku: "AD24", name: "AD24", unit: "L", qty: 780, cost: 13500 },
+    { sku: "AD24MXD1", name: "AD24MXD1", unit: "L", qty: 78, cost: 14000 },
+    { sku: "AD27", name: "AD27", unit: "L", qty: 90, cost: 16000 },
+    { sku: "AD28", name: "AD28 (pc7408)", unit: "L", qty: 60, cost: 16500 },
+    { sku: "AD29", name: "AD29", unit: "L", qty: 90, cost: 16000 },
+    { sku: "AD29MXD1", name: "AD29MXD1 (pc510T)", unit: "L", qty: 5, cost: 17000 },
+    { sku: "AD30MXD2", name: "AD30MXD2", unit: "L", qty: 200, cost: 15000 },
+    { sku: "AD43", name: "AD43 Chemical", unit: "L", qty: 50, cost: 18000 },
+    { sku: "AD43MXD1", name: "AD43MXD1", unit: "L", qty: 65, cost: 18500 },
+    { sku: "CHM-CITRIC", name: "Citric acid anhydrous", unit: "kg", qty: 25, cost: 9000 },
+    { sku: "CHM-MALIC", name: "DL-Malic acid granular", unit: "kg", qty: 125, cost: 21000 },
+    { sku: "CHM-CASO4", name: "Calcium sulphate powder", unit: "kg", qty: 140, cost: 6500 },
+    { sku: "CHM-CAOH2", name: "Calcium hydroxide powder", unit: "kg", qty: 177, cost: 5500 },
+    { sku: "CHM-ASCORBIC", name: "Ascorbic acid anhydrous", unit: "kg", qty: 25, cost: 32000 },
+    { sku: "CHM-CAHYPO", name: "Calcium hypochlorite", unit: "kg", qty: 5, cost: 14000 },
+    { sku: "CHM-SMBS", name: "Sodium metabisulfite powder", unit: "kg", qty: 100, cost: 8500 },
+    { sku: "CHM-CAUSTIC", name: "Caustic flakes", unit: "bags", qty: 48, cost: 95000 },
+    { sku: "CHM-EDTA", name: "EDTA", unit: "bags", qty: 1, cost: 145000 },
+    { sku: "CHM-HNO3", name: "Nitric acid", unit: "L", qty: 60, cost: 11000 },
+    { sku: "CHM-H2O2", name: "Hydrogen peroxide", unit: "L", qty: 35, cost: 13000 },
+    { sku: "CHM-H3PO4", name: "Phosphoric acid (FG)", unit: "L", qty: 25, cost: 15000 },
+    { sku: "CHM-ACETIC", name: "Glacial acetic acid", unit: "L", qty: 250, cost: 12500 },
+    { sku: "CHM-CACL2", name: "Calcium chloride", unit: "L", qty: 250, cost: 7000 },
+    { sku: "CHM-HCL33", name: "Hydrochloric acid 33% TC", unit: "L", qty: 560, cost: 9500 },
+  ];
+
+  // Usage recorded against the same sheet, so those items show a draw-down.
+  const easUsage: Record<string, number> = { AD1: 20, AD2: 5, AD24: 20, AD27: 20, AD30MXD2: 20 };
+
+  const easSite = siteIds.find((site) => site.name.startsWith("EAS Distillery"));
+  const stockDate = new Date(Date.now() - 3 * DAY);
+
+  for (const chemical of easStock) {
+    const itemId = newId("itm");
+    await db.insert(inventoryItems).values({
+      id: itemId,
+      sku: chemical.sku,
+      name: chemical.name,
+      category: "chemical",
+      unit: chemical.unit,
+      // The company-wide total; the ledger below places it at the site.
+      quantityOnHand: chemical.qty,
+      reorderThreshold: Math.max(5, Math.round(chemical.qty * 0.15)),
+      costPerUnit: chemical.cost,
+      supplierId: supplierSeeds[0].id,
+      location: "EAS Distillery — Dar es Salaam",
+    });
+
+    if (!easSite) continue;
+
+    // Purchased into the warehouse, then transferred out to the client's store:
+    // two legs, so the warehouse and site balances both reconcile.
+    const received = chemical.qty + (easUsage[chemical.sku] ?? 0);
+    await db.insert(inventoryMovements).values([
+      {
+        id: newId("mov"),
+        itemId,
+        siteId: null,
+        quantityDelta: received,
+        reason: "purchase",
+        performedBy: staffIds["stores@ecohygiene.co.tz"],
+        createdAt: new Date(stockDate.getTime() - 2 * DAY),
+      },
+      {
+        id: newId("mov"),
+        itemId,
+        siteId: null,
+        quantityDelta: -received,
+        reason: "transfer",
+        notes: "Delivered to EAS chemical store",
+        performedBy: staffIds["stores@ecohygiene.co.tz"],
+        createdAt: new Date(stockDate.getTime() - DAY),
+      },
+      {
+        id: newId("mov"),
+        itemId,
+        siteId: easSite.id,
+        quantityDelta: received,
+        reason: "transfer",
+        notes: "Delivered to EAS chemical store",
+        performedBy: staffIds["stores@ecohygiene.co.tz"],
+        createdAt: new Date(stockDate.getTime() - DAY),
+      },
+    ]);
+
+    const used = easUsage[chemical.sku];
+    if (used) {
+      await db.insert(inventoryMovements).values({
+        id: newId("mov"),
+        itemId,
+        siteId: easSite.id,
+        quantityDelta: -used,
+        reason: "job_usage",
+        notes: "CIP cycle",
+        performedBy: pick(technicians),
+        createdAt: stockDate,
+      });
+      await db
+        .update(inventoryItems)
+        .set({ quantityOnHand: chemical.qty })
+        .where(eq(inventoryItems.id, itemId));
+    }
+  }
 
   /* ------------------------------- equipment ----------------------------- */
 
@@ -571,11 +726,13 @@ async function main() {
         // Chemical consumption, deducted from stock through the ledger.
         const chemical = pick(["CHM-001", "CHM-002", "CHM-004", "CHM-005"]);
         const used = Math.round((1 + random() * 4) * 10) / 10;
+        // Crews carry these from the warehouse, so the draw-down is against the
+        // warehouse balance; the job link records where it was used.
         await db.insert(inventoryMovements).values({
           id: newId("mov"),
           itemId: itemIds[chemical],
           jobId,
-          siteId: site.id,
+          siteId: null,
           quantityDelta: -used,
           reason: "job_usage",
           performedBy: crew[0],
@@ -823,6 +980,25 @@ async function main() {
     totalEmployerCost: runEmployer,
     employeeCount: employeeIds.length,
   }).where(eq(payrollRuns.id, runId));
+
+  /* --------------------- reconcile stock with the ledger ------------------ */
+
+  // quantityOnHand is a materialised total; deriving it here means the seeded
+  // data satisfies the same invariant the app maintains at runtime.
+  const ledger = await db
+    .select({
+      itemId: inventoryMovements.itemId,
+      total: sql<number>`sum("inventory_movements"."quantity_delta")`,
+    })
+    .from(inventoryMovements)
+    .groupBy(inventoryMovements.itemId);
+
+  for (const row of ledger) {
+    await db
+      .update(inventoryItems)
+      .set({ quantityOnHand: Math.round(Number(row.total) * 100) / 100 })
+      .where(eq(inventoryItems.id, row.itemId));
+  }
 
   await db.insert(auditLog).values({
     id: newId("aud"),
